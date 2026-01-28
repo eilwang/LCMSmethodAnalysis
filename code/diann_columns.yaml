@@ -1,49 +1,5 @@
 # Column configurations for different analysis levels
 
-, 'PG.Quantity', 'PG.Normalised', 'PG.MaxLFQ', 'Genes.Quantity',
-       'Genes.Normalised', 'Genes.MaxLFQ', 'Genes.MaxLFQ.Unique',
-       'Modified.Sequence', 'Stripped.Sequence', 'Precursor.Id',
-       'Precursor.Charge', 'Q.Value', 'PEP', 'Global.Q.Value',
-       'Protein.Q.Value', 'PG.Q.Value', 'Global.PG.Q.Value', 'GG.Q.Value',
-       'Translated.Q.Value', 'Proteotypic', 'Precursor.Quantity',
-       'Precursor.Normalised', 'Precursor.Translated', 'Translated.Quality',
-       'Ms1.Translated', 'Quantity.Quality', 'RT', 'RT.Start', 'RT.Stop',
-       'iRT', 'Predicted.RT', 'Predicted.iRT', 'Lib.Q.Value', 'Lib.PG.Q.Value',
-       'Ms1.Profile.Corr', 'Ms1.Area', 'Evidence', 'Spectrum.Similarity',
-       'Averagine', 'Mass.Evidence', 'CScore', 'Decoy.Evidence',
-       'Decoy.CScore', 'Fragment.Quant.Raw', 'Fragment.Quant.Corrected',
-       'Fragment.Correlations', 'MS2.Scan', 'Precursor.Mz', 'Fragment.Info',
-       'Lib.Index', 'IM', 'iIM', 'Predicted.IM', 'Predicted.iIM',
-       'All Mapped Proteins', 'All Mapped Genes', 'M:15.9949',
-       'M:15.9949 Best Localization', 'M:15.9949 Best Scan', 'STY:79.96633',
-       'STY:79.96633 Best Localization', 'STY:79.96633 Best Scan', 'n:42.0106',
-       'n:42.0106 Best Localization', 'n:42.0106 Best Scan'
-* PG
-  1. 'Protein.Group', 'Protein.Ids', 'Protein.Names',
-       'Genes', 'PG.Quantity', 'PG.Normalised', 'PG.MaxLFQ', 'Lib.PG.Q.Value', 'Protein.Q.Value', 'Global.PG.Q.Value', 'PG.Q.Value', 
-* PR
-1. 'Modified.Sequence', 'Stripped.Sequence', 'Precursor.Id',
-       'Precursor.Charge', 'All Mapped Proteins', 'All Mapped Genes',
-               'Q.Value', 'PEP', 'Global.Q.Value',
-       'Translated.Q.Value', 'Proteotypic', 'Precursor.Quantity',
-       'Precursor.Normalised', 'Precursor.Translated', 'Translated.Quality',
-       'Ms1.Translated', 'Quantity.Quality', 'RT', 'RT.Start', 'RT.Stop',
-       'iRT', 'Predicted.RT', 'Predicted.iRT', 'Lib.Q.Value', 
-       'Ms1.Profile.Corr', 'Ms1.Area', 'Evidence', 'Spectrum.Similarity',
-       'Averagine', 'Mass.Evidence', 'CScore', 'Decoy.Evidence',
-       'Decoy.CScore', 'Fragment.Quant.Raw', 'Fragment.Quant.Corrected',
-       'Fragment.Correlations', 'MS2.Scan', 'Precursor.Mz', 'Fragment.Info',
-       'Lib.Index', 'IM', 'iIM', 'Predicted.IM', 'Predicted.iIM',
-        'M:15.9949',
-       'M:15.9949 Best Localization', 'M:15.9949 Best Scan', 'STY:79.96633',
-       'STY:79.96633 Best Localization', 'STY:79.96633 Best Scan', 'n:42.0106',
-       'n:42.0106 Best Localization', 'n:42.0106 Best Scan'],
-       
-GG  
-    1. Straight: 'Genes.Quantity',
-       'Genes.Normalised', 'Genes.MaxLFQ', 'Genes.MaxLFQ.Unique', 'GG.Q.Value',
-
-
 levels:
   precursor:
     var:
@@ -66,19 +22,10 @@ levels:
       - iIM
       - Predicted.IM
       - Predicted.iIM
-      - M:15.9949
-      - M:15.9949 Best Localization
-      - M:15.9949 Best Scan
-      - STY:79.96633
-      - STY:79.96633 Best Localization
-      - STY:79.96633 Best Scan
-      - n:42.0106
-      - n:42.0106 Best Localization
-      - n:42.0106 Best Scan
     x:
-      - Q.Value
+      - Q.Value # within run FDR 
       - PEP
-      - Global.Q.Value
+      - Global.Q.Value # FDR across all runs reflects MBR; < 0.01 == 1% FDR
       - Translated.Q.Value
       - Proteotypic
       - Precursor.Quantity
@@ -109,63 +56,36 @@ levels:
       - MS2.Scan
       - Precursor.Mz
       - Fragment.Info
-       
-    optional:
-
     
-  peptide:
-    required:
-      - PeptideSequence
-      - ProteinGroups
-      - Intensity
-      - Condition
-      - BioReplicate
-    optional:
-      - NumPSMs
-      - RT_mean
-      - RT_std
-      
+    # mod_obs:
+    #   - {residue:mass_shift}
+    #   - {residue:mass_shift} Best Localization
+    #   - {residue:mass_shift} Best Scan
+
   protein:
-    required:
-      - ProteinID
-      - Intensity
-      - Condition
-      - BioReplicate
-      - Run
-    optional:
-      - GeneNames
-      - NumPeptides
-      - Coverage
-      
-  msstats:
-    required:
-      - ProteinName
-      - PeptideSequence
-      - PrecursorCharge
-      - FragmentIon
-      - ProductCharge
-      - IsotopeLabelType
-      - Condition
-      - BioReplicate
-      - Run
-      - Intensity
-    optional:
-      - Fraction
-      - TechReplicate
+    var:
+      - File.Name # entire file path
+      - Run # basename
+    obs:
+      - Protein.Group
+      - Protein.Ids
+      - Protein.Names
+      - Genes
+      - PG.Quantity
+      - PG.Normalised
+      - PG.MaxLFQ
+      - Lib.PG.Q.Value
+      - Protein.Q.Value
+      - Global.PG.Q.Value
+      - PG.Q.Value
 
-# Rename mappings for different formats
-column_mappings:
-  fragpipe:
-    Intensity: "Intensity"
-    ProteinID: "Protein ID"
-    PeptideSequence: "Peptide"
-    
-  maxquant:
-    Intensity: "Intensity"
-    ProteinID: "Protein IDs"
-    PeptideSequence: "Sequence"
-    
-  diann:
-    Intensity: "Precursor.Quantity"
-    ProteinID: "Protein.Group"
-    PeptideSequence: "Stripped.Sequence"
+  gene:
+    var:
+      - File.Name # entire file path
+      - Run # basename
+    obs:
+      - Genes.Quantity
+      - Genes.Normalised
+      - Genes.MaxLFQ
+      - Genes.MaxLFQ.Unique
+      - GG.Q.Value
