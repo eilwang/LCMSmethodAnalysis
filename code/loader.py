@@ -262,7 +262,6 @@ class DiannLoader:
             else:
                 warnings.warn(msg)
                 adata.obs_names_make_unique()
-                s
                 print("Obs names made unique by appending indices.")
                 print(adata.obs_names[~adata.obs_names.isin(temp_obs_name)])
 
@@ -277,10 +276,11 @@ class DiannLoader:
             pivot_df = df.pivot(index=level_config['obs'], 
                                 columns=var_name,
                                 values=l)
-            
-            adata.layers[l] = pivot_df.reindex(index=adata.obs_names,
+            pivot_df.reindex(index=adata.obs_names,
                                                columns=adata.var_names, 
                                                fill_value=np.nan).values
+            
+            adata.layers[l] = pivot_df
 
         return adata
 
