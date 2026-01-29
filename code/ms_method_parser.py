@@ -1,0 +1,390 @@
+"""
+MS Method Parser for Bruker microTOFQImpacTemAcquisition.method files
+
+This module provides structured access to mass spectrometry method parameters
+from Bruker TimsTOF instrument method files.
+"""
+
+import xml.etree.ElementTree as ET
+from typing import Dict, List, Optional, Any, Union
+import pandas as pd
+from pathlib import Path
+
+from method_path_resolver import MethodPathResolver
+
+
+class MSMethod:
+    """Parse and provide structured access to MS method parameters."""
+
+    def __init__(self, method_path: str):
+        """
+        Initialize with method file path.
+
+        Parameters:
+        -----------
+        method_path : str
+            Path to the .method file (microTOFQImpacTemAcquisition.method),
+            path to the parent .m directory, or path to a .zip file containing
+            the method directory
+        """
+        self.original_path = Path(method_path)
+
+        # Create path resolver to handle both zipped and unzipped methods
+        self.resolver = MethodPathResolver(method_path)
+
+        # Resolve the method directory
+        self.method_dir = self.resolver.resolve()
+
+        # If original path was to the XML file itself, use it directly
+        if self.original_path.suffix == '.method':
+            xml_path = self.method_dir.parent / self.original_path.name
+        else:
+            # Path is to the .m directory
+            xml_path = self.method_dir / 'microTOFQImpacTemAcquisition.method'
+
+        # Parse XML method
+        self.tree = ET.parse(xml_path)
+        self.root = self.tree.getroot()
+
+        # Parse sections
+        self.fileinfo = self._parse_fileinfo()
+        self.generalinfo = self._parse_generalinfo()
+        self.instrument_params = self._parse_instrument_params()
+        self.polarity_configs = self._parse_polarity_configs()
+
+    def _parse_fileinfo(self) -> Dict[str, str]:
+        """Parse fileinfo metadata."""
+        fileinfo_elem = self.root.find('fileinfo')
+        if fileinfo_elem is None:
+            return {}
+
+        return dict(fileinfo_elem.attrib)
+
+    def _parse_generalinfo(self) -> Dict[str, str]:
+        """Parse general information section."""
+        generalinfo = {}
+        generalinfo_elem = self.root.find('generalinfo')
+
+        if generalinfo_elem is not None:
+            for child in generalinfo_elem:
+                generalinfo[child.tag] = child.text or ""
+
+        return generalinfo
+
+    def _parse_parameter(self, param_elem: ET.Element) -> Union[int, float, str, List]:
+        """
+        Parse a parameter element based on its type.
+
+        Parameters:
+        -----------
+        param_elem : ET.Element
+            XML element for the parameter
+
+        Returns:
+        --------
+        Union[int, float, str, List]
+            Parsed parameter value
+        """
+        tag = param_elem.tag
+        permname = param_elem.get('permname', '')
+
+        if tag == 'para_int':
+            return int(param_elem.get('value', 0))
+        elif tag == 'para_double':
+            return float(param_elem.get('value', 0.0))
+        elif tag == 'para_string':
+            return param_elem.get('value', '')
+        elif tag == 'para_vec_double':
+            return [float(e.get('value', 0.0)) for e in param_elem.findall('entry_double')]
+        elif tag == 'para_vec_string':
+            return [e.get('value', '') for e in param_elem.findall('entry_string')]
+        else:
+            return param_elem.get('value', '')
+
+    def _parse_instrument_params(self) -> Dict[str, Any]:
+        """
+        Parse global instrument parameters (not polarity-specific).
+
+        Returns:
+        --------
+        Dict[str, Any]
+            Dictionary of parameter names to values
+        """
+        params = {}
+        instrument_elem = self.root.find('.//instrument/qtofimpactemacq')
+
+        if instrument_elem is None:
+            return params
+
+        # Parse only direct children (not nested in dependent sections)
+        for child in instrument_elem:
+            if child.tag.startswith('para_') and 'permname' in child.attrib:
+                permname = child.attrib['permname']
+                params[permname] = self._parse_parameter(child)
+
+        return params
+
+    def _parse_polarity_configs(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Parse polarity-dependent configurations.
+
+        Returns:
+        --------
+        Dict[str, Dict[str, Any]]
+            Nested dictionary: polarity -> source -> parameters
+            Structure: {
+                'negative': {'default': {...}, 'esi': {...}, ...},
+                'positive': {'default': {...}, 'esi': {...}, ...}
+            }
+        """
+        configs = {}
+        instrument_elem = self.root.find('.//instrument/qtofimpactemacq')
+
+        if instrument_elem is None:
+            return configs
+
+        # Find all dependent elements
+        for dependent_elem in instrument_elem.findall('dependent'):
+            polarity = dependent_elem.get('polarity', '')
+            source = dependent_elem.get('source', 'default')
+
+            if polarity not in configs:
+                configs[polarity] = {}
+
+            # Parse parameters for this polarity/source combination
+            params = {}
+            for child in dependent_elem:
+                if child.tag.startswith('para_') and 'permname' in child.attrib:
+                    permname = child.attrib['permname']
+                    params[permname] = self._parse_parameter(child)
+
+            configs[polarity][source] = params
+
+        return configs
+
+    def get_param(self, param_name: str, polarity: Optional[str] = None,
+                  source: str = 'default') -> Optional[Any]:
+        """
+        Get a parameter value.
+
+        Parameters:
+        -----------
+        param_name : str
+            Parameter name (permname)
+        polarity : Optional[str]
+            'positive', 'negative', or None for global parameters
+        source : str
+            Ion source ('esi', 'apci', etc.), default is 'default'
+
+        Returns:
+        --------
+        Optional[Any]
+            Parameter value or None if not found
+        """
+        if polarity is None:
+            return self.instrument_params.get(param_name)
+
+        if polarity in self.polarity_configs:
+            if source in self.polarity_configs[polarity]:
+                return self.polarity_configs[polarity][source].get(param_name)
+
+        return None
+
+    def get_calibration_info(self, polarity: str = 'negative') -> Dict[str, Any]:
+        """
+        Extract calibration information for a specific polarity.
+
+        Parameters:
+        -----------
+        polarity : str
+            'positive' or 'negative'
+
+        Returns:
+        --------
+        Dict[str, Any]
+            Dictionary of calibration parameters
+        """
+        calibration = {}
+
+        if polarity in self.polarity_configs and 'default' in self.polarity_configs[polarity]:
+            params = self.polarity_configs[polarity]['default']
+
+            # Extract calibration-related parameters
+            for key, value in params.items():
+                if key.startswith('Calibration_'):
+                    calibration[key] = value
+
+        return calibration
+
+    def get_collision_cell_params(self, polarity: str = 'negative') -> Dict[str, Any]:
+        """
+        Extract collision cell parameters.
+
+        Parameters:
+        -----------
+        polarity : str
+            'positive' or 'negative'
+
+        Returns:
+        --------
+        Dict[str, Any]
+            Dictionary of collision cell parameters
+        """
+        collision_params = {}
+
+        # Get global collision parameters
+        for key, value in self.instrument_params.items():
+            if key.startswith('Collision_'):
+                collision_params[key] = value
+
+        # Get polarity-specific collision parameters
+        if polarity in self.polarity_configs and 'default' in self.polarity_configs[polarity]:
+            params = self.polarity_configs[polarity]['default']
+            for key, value in params.items():
+                if key.startswith('Collision_'):
+                    collision_params[key] = value
+
+        return collision_params
+
+    def get_tof_params(self, polarity: str = 'negative') -> Dict[str, Any]:
+        """
+        Extract TOF (Time of Flight) parameters.
+
+        Parameters:
+        -----------
+        polarity : str
+            'positive' or 'negative'
+
+        Returns:
+        --------
+        Dict[str, Any]
+            Dictionary of TOF parameters
+        """
+        tof_params = {}
+
+        # Get global TOF parameters
+        for key, value in self.instrument_params.items():
+            if key.startswith('TOF_'):
+                tof_params[key] = value
+
+        # Get polarity-specific TOF parameters (from calibration)
+        if polarity in self.polarity_configs and 'default' in self.polarity_configs[polarity]:
+            params = self.polarity_configs[polarity]['default']
+            for key, value in params.items():
+                if key.startswith('Calibration_TOF_') or key.startswith('TOF_'):
+                    tof_params[key] = value
+
+        return tof_params
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Export all method data as a dictionary.
+
+        Returns:
+        --------
+        Dict[str, Any]
+            Complete method data structure
+        """
+        return {
+            'fileinfo': self.fileinfo,
+            'generalinfo': self.generalinfo,
+            'instrument_params': self.instrument_params,
+            'polarity_configs': self.polarity_configs
+        }
+
+    def summary(self) -> str:
+        """Return summary of method."""
+        summary_lines = []
+        summary_lines.append("MS Method Summary")
+        summary_lines.append("=" * 70)
+
+        # File info
+        summary_lines.append("\nFile Information:")
+        summary_lines.append(f"  Type: {self.fileinfo.get('type', 'N/A')}")
+        summary_lines.append(f"  Application: {self.fileinfo.get('appname', 'N/A')} v{self.fileinfo.get('appversion', 'N/A')}")
+        summary_lines.append(f"  Created: {self.fileinfo.get('createdate', 'N/A')}")
+
+        # General info
+        summary_lines.append("\nGeneral Information:")
+        summary_lines.append(f"  Organization: {self.generalinfo.get('org', 'N/A')}")
+        summary_lines.append(f"  Hostname: {self.generalinfo.get('hostname', 'N/A')}")
+        summary_lines.append(f"  Author: {self.generalinfo.get('author', 'N/A')}")
+        summary_lines.append(f"  Last Modified: {self.generalinfo.get('modified-by-timstof-on', 'N/A')}")
+
+        # Global parameters
+        summary_lines.append(f"\nGlobal Instrument Parameters: {len(self.instrument_params)}")
+
+        # Polarity configurations
+        summary_lines.append("\nPolarity Configurations:")
+        for polarity, sources in self.polarity_configs.items():
+            summary_lines.append(f"  {polarity.capitalize()}: {len(sources)} source(s)")
+            for source in list(sources.keys())[:3]:  # Show first 3 sources
+                param_count = len(sources[source])
+                summary_lines.append(f"    - {source}: {param_count} parameters")
+
+        # Key parameters
+        summary_lines.append("\nKey Global Parameters:")
+        key_params = [
+            'Digitizer_SampleIntervall',
+            'Digitizer_NoiseSuppressionThreshold',
+            'Collision_GasSupply_Set',
+            'TOF_DetectorTofSetValue'
+        ]
+        for param in key_params:
+            value = self.instrument_params.get(param)
+            if value is not None:
+                summary_lines.append(f"  {param}: {value}")
+
+        return '\n'.join(summary_lines)
+
+    def cleanup(self):
+        """Clean up temporary files if method was loaded from zip."""
+        if self.resolver:
+            self.resolver.cleanup()
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - cleanup temp files."""
+        self.cleanup()
+
+    def __del__(self):
+        """Destructor - cleanup temp files."""
+        self.cleanup()
+
+    def __repr__(self):
+        polarities = list(self.polarity_configs.keys())
+        return (f"MSMethod(instrument_params={len(self.instrument_params)}, "
+                f"polarities={polarities})")
+
+
+# Usage example
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) > 1:
+        method_path = sys.argv[1]
+    else:
+        # Default path for testing
+        method_path = "/Users/eileen.wang/Desktop/diann/SampleData/methods/MS/DIA003.proteoscape.m/microTOFQImpacTemAcquisition.method"
+
+    # Parse method
+    method = MSMethod(method_path)
+
+    # Print summary
+    print(method.summary())
+
+    # Example: Get specific parameter
+    print("\n" + "=" * 70)
+    print("\nExample Parameter Access:")
+    print(f"Collision Gas Supply: {method.get_param('Collision_GasSupply_Set')}")
+    print(f"Negative Polarity Collision Bias: {method.get_param('Collision_Bias_Set', polarity='negative')}")
+
+    # Get calibration info
+    print("\n" + "=" * 70)
+    print("\nCalibration Info (Negative):")
+    cal_info = method.get_calibration_info('negative')
+    for key in list(cal_info.keys())[:5]:  # Show first 5
+        print(f"  {key}: {cal_info[key]}")

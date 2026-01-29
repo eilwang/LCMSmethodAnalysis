@@ -5,6 +5,7 @@ from typing import List, Optional, Dict
 import warnings
 import anndata as ad # pyright: ignore[reportMissingImports]
 import numpy as np
+import os
 
 class DiannLoader:
     def __init__(self, config_path: str = "diann_columns.yaml"):
@@ -201,9 +202,9 @@ class DiannLoader:
         filepath: str,
         level: str,
         sections: Optional[List[str]] = None,
-        include_optional: bool = True,
         strict: bool = False,
-        strictly_uniquevar: bool = True
+        output_path: Optional[str] = None,
+        mk_dir: bool = True,
     ) -> ad.AnnData:
         """
         Load DIA-NN data with column selection based on level into an AnnData object.
@@ -273,15 +274,25 @@ class DiannLoader:
         layers = df.columns[~df.columns.isin(level_config['var'] + level_config['obs'])]
 
         for l in layers:
-            pivot_df = df.pivot(index=level_config['obs'], 
+            pivot_df = df.pivot(index=level_config['obs'],
                                 columns=var_name,
                                 values=l)
-            pivot_df.reindex(index=adata.obs_names,
-                                               columns=adata.var_names, 
-                                               fill_value=np.nan).values
-            
-            adata.layers[l] = pivot_df
 
+            adata.layers[l] = pivot_df.reindex(index=adata.obs_names,
+                                               columns=adata.var_names,
+                                               fill_value=np.nan).values
+        # TODO: make it possible to save to h5ad
+        # if output_path:
+        #     output_dir = os.path.dirname(output_path)
+        #     if output_dir and not os.path.exists(output_dir):
+        #         if mk_dir:
+        #             os.makedirs(output_dir, exist_ok=True)
+        #             print(f"Created directory: {output_dir}/{level}")
+        #         else:
+        #             raise FileNotFoundError(f"Directory does not exist: {output_dir}. Set mk_dir=True to create it.")
+        #     adata.write_h5ad(f'{output_path}/{level}_report.h5ad')
+        #     print(f"AnnData object saved to {output_path}/{level}_report.h5ad")
+            
         return adata
 
 

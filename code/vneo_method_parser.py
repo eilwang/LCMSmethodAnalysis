@@ -1,3 +1,4 @@
+# adapted from https://github.com/nickdelgrosso/XCaliburMethodReader
 import pandas as pd
 import re
 from typing import Dict, List, Optional, Any
@@ -31,7 +32,8 @@ class LCMethod:
         if so, split the line into key and value and return them
            * if the value has a unit attached in square brackets, append the unit to the key
         if not, return the line as key (which may be a sectionheader) and None as value
-        
+           * if the section header has a unit in brackets, strip it from the key
+
         :param self: Description
         :param line: Description
         """
@@ -39,23 +41,20 @@ class LCMethod:
 
         if key_value_pair:
             key, value = line.split(': ', 1)
-            unit = re.search(r'(\[.+?\])', value)
+            unit = re.search(r'\[.+?\]', value)
             if unit:
-                key = f'{key} {unit.group(0)}'
-                value = value.replace(unit.group(0), '')
+                key = f'{key} {unit.group(0)}'  # unit.group(0) now has no extra spaces
+                value = value.replace(unit.group(0), '').strip()
             return key.strip(), value.strip()
 
-        return line, None
+        return line.strip(), None
     
     def _parse_method(self):
         raw_text = self.read_meth()
         lines = raw_text.split('\r\n')
 
         sections = {
-            'Gradient': pd.DataFrame(columns=['time [min]',
-                        'Neo.PumpModule.Pump.Flow.Nominal [µl/min]',
-                        'Neo.PumpModule.Pump.%B.Value [%]',
-                        'Neo.PumpModule.Pump.Curve'])
+            'Gradient': []  # Store as list of dicts, convert to DataFrame later
         }
 
         current_section = None
@@ -78,9 +77,11 @@ class LCMethod:
                     current_section = 'Gradient'
                     gradient_step = {'time [min]': '0.000'}
                 elif current_section == 'Gradient':  # Gradient time point or end
-                    sections['Gradient'].loc[len(sections['Gradient'])] = gradient_step
+                    sections['Gradient'].append(gradient_step)
                     if 'Stop Run' not in key:
-                        gradient_step = {'time [min]': key}
+                        # Extract just the numeric time value, stripping [min] unit if present
+                        time_value = re.sub(r'\s*\[min\]', '', key)
+                        gradient_step = {'time [min]': time_value}
                     else:
                         current_section = key
                 else:  # Regular section header
@@ -94,10 +95,23 @@ class LCMethod:
                     if current_section not in sections:
                         sections[current_section] = {} # type: ignore
                     sections[current_section][key] = value
-        sections['Instrument Setup'] = sections.pop('initial     Instrument Setup')
-        sections['Equilibration'] = pd.DataFrame([sections.pop('0.000 [min] Equilibration')]) # type: ignore
 
-        return sections['Run time [min]'], sections['Instrument Setup'], sections['Gradient'], sections['Equilibration']
+        sections['Instrument Setup'] = sections.pop('initial     Instrument Setup')
+        # Look for Equilibration section with any time prefix
+        equil_key = [k for k in sections.keys() if 'Equilibration' in k][0]
+        equil_df = pd.DataFrame([sections.pop(equil_key)])
+
+        # Convert gradient list to DataFrame
+        gradient_df = pd.DataFrame(sections['Gradient'])
+
+        # Convert numeric columns to float (skip non-numeric like 'Curve')
+        for col in gradient_df.columns:
+            gradient_df[col] = pd.to_numeric(gradient_df[col], errors='ignore')
+
+        for col in equil_df.columns:
+            equil_df[col] = pd.to_numeric(equil_df[col], errors='ignore')
+
+        return float(sections['Run time [min]']), sections['Instrument Setup'], gradient_df, equil_df
 
 
 

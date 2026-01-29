@@ -1,0 +1,380 @@
+"""
+Unified Bruker Method Parser
+
+This module provides a unified interface to parse complete Bruker TimsTOF method
+files, combining MS instrument parameters and DIA acquisition settings.
+"""
+
+from pathlib import Path
+from typing import Dict, Any, Optional
+import pandas as pd
+
+from ms_method_parser import MSMethod
+from dia_settings_parser import DIASettings
+from synchro_settings_parser import SynchroSettings
+from method_path_resolver import MethodPathResolver
+
+
+class BrukerMethod:
+    """
+    Unified parser for Bruker TimsTOF method files.
+
+    This class combines MSMethod (instrument parameters from XML),
+    DIASettings (acquisition windows from SQLite), and optionally
+    SynchroSettings (synchronization settings from SQLite).
+
+    Attributes:
+    -----------
+    method_path : Path
+        Path to the .m method directory
+    ms : MSMethod
+        MS instrument parameters (calibration, collision cell, TOF, polarity configs)
+    dia : DIASettings or None
+        DIA acquisition settings (windows, cycles, ion mobility)
+    synchro : SynchroSettings or None
+        Synchronization settings (if configured)
+    """
+
+    def __init__(self, method_path: str, parse_synchro: bool = False):
+        """
+        Initialize with method directory path.
+
+        Parameters:
+        -----------
+        method_path : str
+            Path to the .m method directory
+        parse_synchro : bool
+            Whether to parse synchroSettings (default: False)
+        """
+        self.method_path = Path(method_path)
+
+        if not self.method_path.exists():
+            raise FileNotFoundError(f"Method directory not found: {self.method_path}")
+
+        # Parse MS instrument parameters (always present)
+        self.ms = MSMethod(self.method_path)
+
+        # Parse DIA settings (if present)
+        dia_db_path = self.method_path / 'diaSettings.diasqlite'
+        if dia_db_path.exists():
+            try:
+                self.dia = DIASettings(self.method_path)
+            except Exception as e:
+                print(f"Warning: Could not parse DIA settings: {e}")
+                self.dia = None
+        else:
+            self.dia = None
+
+        # Parse synchro settings (optional)
+        if parse_synchro:
+            synchro_db_path = self.method_path / 'synchroSettings.syncsqlite'
+            if synchro_db_path.exists():
+                try:
+                    self.synchro = SynchroSettings(self.method_path)
+                except Exception as e:
+                    print(f"Warning: Could not parse synchro settings: {e}")
+                    self.synchro = None
+            else:
+                self.synchro = None
+        else:
+            self.synchro = None
+
+    # ========================================================================
+    # Convenience methods for MS parameters
+    # ========================================================================
+
+    def get_param(self, param_name: str, polarity: Optional[str] = None,
+                  source: str = 'default') -> Optional[Any]:
+        """
+        Get an MS instrument parameter.
+
+        Parameters:
+        -----------
+        param_name : str
+            Parameter name (permname)
+        polarity : Optional[str]
+            'positive', 'negative', or None for global parameters
+        source : str
+            Ion source ('esi', 'apci', etc.), default is 'default'
+
+        Returns:
+        --------
+        Optional[Any]
+            Parameter value or None if not found
+        """
+        return self.ms.get_param(param_name, polarity, source)
+
+    def get_calibration_info(self, polarity: str = 'negative') -> Dict[str, Any]:
+        """Get calibration information for a specific polarity."""
+        return self.ms.get_calibration_info(polarity)
+
+    def get_collision_cell_params(self, polarity: str = 'negative') -> Dict[str, Any]:
+        """Get collision cell parameters."""
+        return self.ms.get_collision_cell_params(polarity)
+
+    def get_tof_params(self, polarity: str = 'negative') -> Dict[str, Any]:
+        """Get TOF (Time of Flight) parameters."""
+        return self.ms.get_tof_params(polarity)
+
+    # ========================================================================
+    # Convenience methods for DIA settings
+    # ========================================================================
+
+    def get_dia_windows(self) -> Optional[pd.DataFrame]:
+        """
+        Get DIA/MS2 windows only.
+
+        Returns:
+        --------
+        Optional[pd.DataFrame]
+            DataFrame of DIA windows, or None if DIA settings not available
+        """
+        if self.dia is None:
+            return None
+        return self.dia.get_dia_windows()
+
+    def get_ms1_windows(self) -> Optional[pd.DataFrame]:
+        """
+        Get MS1 windows only.
+
+        Returns:
+        --------
+        Optional[pd.DataFrame]
+            DataFrame of MS1 windows, or None if DIA settings not available
+        """
+        if self.dia is None:
+            return None
+        return self.dia.get_ms1_windows()
+
+    def get_windows_by_cycle(self, cycle_id: int) -> Optional[pd.DataFrame]:
+        """
+        Get windows for a specific cycle.
+
+        Parameters:
+        -----------
+        cycle_id : int
+            Cycle identifier
+
+        Returns:
+        --------
+        Optional[pd.DataFrame]
+            Windows in the specified cycle, or None if DIA settings not available
+        """
+        if self.dia is None:
+            return None
+        return self.dia.get_windows_by_cycle(cycle_id)
+
+    def get_cycle_ids(self) -> Optional[list]:
+        """
+        Get list of unique cycle IDs.
+
+        Returns:
+        --------
+        Optional[list]
+            Sorted list of cycle IDs, or None if DIA settings not available
+        """
+        if self.dia is None:
+            return None
+        return self.dia.get_cycle_ids()
+
+    def plot_windows(self, ax=None, show_labels: bool = True,
+                     color_by_cycle: bool = True, uniform_color: str = 'steelblue',
+                     alpha: float = 0.6, edge_color: str = 'white',
+                     method_name: Optional[str] = None,
+                     figsize=(12, 8)):
+        """
+        Plot DIA windows in m/z vs ion mobility (1/K0) space.
+
+        Parameters:
+        -----------
+        ax : matplotlib.axes.Axes, optional
+            External axis to plot on. If None, creates new figure.
+        show_labels : bool
+            Whether to show cycle ID labels on windows (default: True)
+        color_by_cycle : bool
+            If True, color windows by cycle ID. If False, use uniform_color (default: True)
+        uniform_color : str
+            Color to use when color_by_cycle=False (default: 'steelblue')
+        alpha : float
+            Transparency of window fills, 0-1 (default: 0.6)
+        edge_color : str
+            Color of window outlines (default: 'white')
+        method_name : str, optional
+            Method name to include in legend. Useful when plotting multiple methods
+            on same axis for comparison.
+        figsize : tuple
+            Figure size if creating new figure (default: (12, 8))
+
+        Returns:
+        --------
+        matplotlib.axes.Axes or None
+            The axis object with the plot, or None if DIA settings not available
+        """
+        if self.dia is None:
+            print("Warning: No DIA settings available to plot")
+            return None
+        return self.dia.plot_windows(ax=ax, show_labels=show_labels,
+                                     color_by_cycle=color_by_cycle,
+                                     uniform_color=uniform_color,
+                                     alpha=alpha, edge_color=edge_color,
+                                     method_name=method_name,
+                                     figsize=figsize)
+
+    # ========================================================================
+    # Export methods
+    # ========================================================================
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Export all method data as a dictionary.
+
+        Returns:
+        --------
+        Dict[str, Any]
+            Complete method data structure
+        """
+        result = {
+            'ms_method': self.ms.to_dict(),
+            'has_dia': self.dia is not None,
+            'has_synchro': self.synchro is not None and not self.synchro.is_empty
+        }
+
+        if self.dia is not None:
+            result['dia_settings'] = self.dia.to_dict()
+
+        if self.synchro is not None:
+            result['synchro_settings'] = self.synchro.to_dict()
+
+        return result
+
+    def summary(self) -> str:
+        """Return comprehensive summary of method."""
+        summary_lines = []
+        summary_lines.append("=" * 80)
+        summary_lines.append("BRUKER TIMSTOF METHOD SUMMARY")
+        summary_lines.append("=" * 80)
+        summary_lines.append(f"\nMethod Directory: {self.method_path.name}")
+
+        # MS Method section
+        summary_lines.append("\n" + "=" * 80)
+        summary_lines.append("MS INSTRUMENT PARAMETERS")
+        summary_lines.append("=" * 80)
+        summary_lines.append(f"Global parameters: {len(self.ms.instrument_params)}")
+        summary_lines.append(f"Polarities configured: {', '.join(self.ms.polarity_configs.keys())}")
+
+        # Show a few key parameters
+        summary_lines.append("\nKey Global Parameters:")
+        key_params = [
+            'Digitizer_SampleIntervall',
+            'Collision_GasSupply_Set',
+            'TOF_DetectorTofSetValue'
+        ]
+        for param in key_params:
+            value = self.ms.instrument_params.get(param)
+            if value is not None:
+                summary_lines.append(f"  {param}: {value}")
+
+        # Capillary voltage by source
+        summary_lines.append("\nCapillary Voltages (Negative Mode, ESI):")
+        cap_voltage = self.get_param('Source_CapillarySetValue', polarity='negative', source='esi')
+        if cap_voltage is not None:
+            summary_lines.append(f"  ESI: {cap_voltage} V")
+
+        # DIA Settings section
+        if self.dia is not None:
+            summary_lines.append("\n" + "=" * 80)
+            summary_lines.append("DIA ACQUISITION SETTINGS")
+            summary_lines.append("=" * 80)
+
+            summary_lines.append(f"Total windows: {len(self.dia.windows)}")
+            summary_lines.append(f"MS1 windows: {len(self.get_ms1_windows())}")
+            summary_lines.append(f"DIA windows: {len(self.get_dia_windows())}")
+
+            dia_windows = self.get_dia_windows()
+            if len(dia_windows) > 0:
+                summary_lines.append(f"\nDIA Window Ranges:")
+                summary_lines.append(f"  m/z: {dia_windows['MzStart'].min():.1f} - {dia_windows['MzEnd'].max():.1f}")
+                summary_lines.append(f"  1/K0 (Ion Mobility): {dia_windows['OneOverK0Start'].min():.2f} - {dia_windows['OneOverK0End'].max():.2f}")
+                if dia_windows['CollisionEnergy'].notna().any():
+                    summary_lines.append(f"  Collision Energy: {dia_windows['CollisionEnergy'].min():.1f} - {dia_windows['CollisionEnergy'].max():.1f} eV")
+
+            cycle_ids = self.get_cycle_ids()
+            if cycle_ids:
+                summary_lines.append(f"  Unique cycles: {len(cycle_ids)} ({min(cycle_ids)} - {max(cycle_ids)})")
+        else:
+            summary_lines.append("\n" + "=" * 80)
+            summary_lines.append("DIA ACQUISITION SETTINGS: Not Available")
+            summary_lines.append("=" * 80)
+
+        # Synchro Settings section
+        if self.synchro is not None:
+            summary_lines.append("\n" + "=" * 80)
+            summary_lines.append("SYNCHRONIZATION SETTINGS")
+            summary_lines.append("=" * 80)
+            if self.synchro.is_empty:
+                summary_lines.append("Status: Empty (no synchronization configured)")
+            else:
+                summary_lines.append(f"Status: Active ({len(self.synchro.tables)} table(s))")
+                for table_name in self.synchro.tables[:3]:  # Show first 3
+                    df = self.synchro.data.get(table_name)
+                    if df is not None:
+                        summary_lines.append(f"  - {table_name}: {len(df)} row(s)")
+
+        summary_lines.append("\n" + "=" * 80)
+
+        return '\n'.join(summary_lines)
+
+    def __repr__(self):
+        dia_status = f"DIA={len(self.dia.windows)} windows" if self.dia else "DIA=None"
+        synchro_status = "Synchro=Active" if (self.synchro and not self.synchro.is_empty) else "Synchro=None"
+        return (f"BrukerMethod({self.method_path.name}, "
+                f"MS_params={len(self.ms.instrument_params)}, "
+                f"{dia_status}, {synchro_status})")
+
+
+# Usage example
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) > 1:
+        method_path = sys.argv[1]
+    else:
+        # Default path for testing
+        method_path = "/Users/eileen.wang/Desktop/diann/SampleData/methods/MS/DIA003.proteoscape.m"
+
+    # Parse complete method
+    method = BrukerMethod(method_path, parse_synchro=True)
+
+    # Print comprehensive summary
+    print(method.summary())
+
+    # Example: Access specific parameters
+    print("\n" + "=" * 80)
+    print("EXAMPLE PARAMETER ACCESS")
+    print("=" * 80)
+
+    print("\n1. Get MS parameter:")
+    print(f"   Collision Gas Supply: {method.get_param('Collision_GasSupply_Set')}")
+    print(f"   Capillary Voltage (ESI, Negative): {method.get_param('Source_CapillarySetValue', polarity='negative', source='esi')} V")
+
+    if method.dia is not None:
+        print("\n2. Get DIA windows:")
+        dia_windows = method.get_dia_windows()
+        print(f"   DIA windows: {len(dia_windows)}")
+        print(f"   First window m/z range: {dia_windows.iloc[0]['MzStart']:.1f} - {dia_windows.iloc[0]['MzEnd']:.1f}")
+
+        print("\n3. Get windows by cycle:")
+        cycle_ids = method.get_cycle_ids()
+        if cycle_ids:
+            first_cycle = cycle_ids[0]
+            cycle_windows = method.get_windows_by_cycle(first_cycle)
+            print(f"   Cycle {first_cycle} has {len(cycle_windows)} window(s)")
+
+        print("\n4. Plot DIA windows:")
+        print("   Creating visualization...")
+        ax = method.plot_windows()
+        if ax is not None:
+            import matplotlib.pyplot as plt
+            plt.tight_layout()
+            plt.show()
+            print("   ✓ Plot created")
