@@ -2,12 +2,6 @@
 
 levels:
   precursor:
-    var_name:
-      - Run
-    obs_name:
-      - Precursor.Id
-    x:
-      - Precursor.Quantity
     var:
       - File.Name # entire file path
       - Run # basename
@@ -24,6 +18,8 @@ levels:
       - Precursor.Charge
       - Lib.Index
     layers:
+      - Precursor.Quantity
+      - Precursor.Normalised
       - IM
       - iIM
       - Predicted.IM
@@ -37,8 +33,6 @@ levels:
       - PEP
       - Global.Q.Value # FDR across all runs reflects MBR; < 0.01 == 1% FDR
       - Translated.Q.Value
-      - Precursor.Quantity
-      - Precursor.Normalised
       - Precursor.Translated
       - Translated.Quality
       - Ms1.Translated
@@ -61,6 +55,8 @@ levels:
       - Fragment.Correlations
       - MS2.Scan
       - Fragment.Info
+
+# Label.Ratio	
     
     # mod_obs:
     #   - {residue:mass_shift}
@@ -68,18 +64,12 @@ levels:
     #   - {residue:mass_shift} Best Scan
 
   protein:
-    var_name:
-       - Run
-    obs_name:
-      - Protein.Ids
-    x:
-      - PG.MaxLFQ
     var:
       - File.Name # entire file path
       - Run # basename
     obs:
-      - Protein.Group
       - Protein.Ids
+      - Protein.Group
       - Protein.Names
       - Genes
       
@@ -88,27 +78,84 @@ levels:
       - Stripped.Sequence
       - Precursor.Id
     layers:
+      - PG.MaxLFQ
       - PG.Quantity
       - PG.Normalised
-      - PG.MaxLFQ
       - Lib.PG.Q.Value
       - Protein.Q.Value
       - Global.PG.Q.Value
       - PG.Q.Value
 
   gene:
-    var_name:
-      - Run
-    obs_name:
+    obs:
       - Genes
-    x:
-      - Genes.MaxLFQ
     var:
       - File.Name # entire file path
       - Run # basename
     layers:
+      - Genes.MaxLFQ
       - Genes.Quantity
       - Genes.Normalised
-      - Genes.MaxLFQ
       - Genes.MaxLFQ.Unique
       - GG.Q.Value
+
+
+# File.Name	
+# Run	
+# Protein.Group	
+# Protein.Ids	
+# Protein.Names	
+# Genes	
+# PG.Quantity	
+# PG.Normalised	
+# Genes.Quantity	
+# Genes.Normalised	
+# Genes.MaxLFQ
+# Genes.MaxLFQ.Unique	
+# PG.MaxLFQ	
+# Modified.Sequence	
+# Stripped.Sequence	
+# Precursor.Id	
+# Precursor.Charge	
+# Q.Value	
+# Protein.Q.Value	
+# PG.Q.Value	
+# GG.Q.Value	
+# Proteotypic	
+# Precursor.Quantity	
+# Precursor.Normalised
+
+# Quantity.Quality	
+# RT	
+# RT.Start	
+# RT.Stop	
+# iRT	
+# Predicted.RT	
+# Predicted.iRT	
+# First.Protein.Description	
+# Lib.Q.Value	
+# Ms1.Profile.Corr	
+# Ms1.Corr.Sum	
+# Ms1.Area	
+# Evidence	
+# CScore	
+# Decoy.Evidence	
+# Decoy.CScore	
+# Fragment.Quant.Raw	
+# Fragment.Quant.Corrected	
+# Fragment.Correlations	
+# MS2.Scan	
+# Precursor.FWHM	
+# Precursor.Error.Ppm	
+# Corr.Precursor.Error.Ppm	
+# Data.Points	
+# Ms1.Iso.Corr.Sum	
+# Library.Precursor.Mz	
+# Corrected.Precursor.Mz	
+# Fragment.Info	
+# Precursor.Calibrated.Mz	
+# Fragment.Calibrated.Mz	
+# Exp.1/K0	
+# Lib.1/K0
+
+# Label.Ratio	

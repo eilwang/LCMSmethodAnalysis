@@ -1,0 +1,147 @@
+TIMS DIA-NN 1.7.12.  Bruker (Data Independent Acquisition by Neural Networks)
+Compiled on Mar 18 2024 10:22:45
+Current date and time: Wed Jan 28 21:35:53 2026
+Logical CPU cores: 32
+Using configuration file: /tmp/output/params.conf
+Implicit protein grouping by: genes
+DIA-NN will append library information columns to the report
+DIA-NN will save Precursor/Protein x samples expression level matrices along with the main report
+Minimum peak height set to 20.000000
+Number of interference removal iterations set to 1
+Library precursors will be reannotated using the FASTA database
+Global mass accuracy set to : 0.000020
+Global mass accuracy for MS1 set to : 0.000015
+Only peaks with correlation sum exceeding 1.500000 will be considered
+Output will be filtered at 0.010000 FDR
+Output will be filtered at 0.010000 protein-level FDR
+Reproducible runs enabled
+Percentage of training : 0.400000
+Epoch number for the 1st iteration : 5
+Epoch number for the 2nd iteration : 3
+Protein Q value computation function: 1
+DIA-NN will use corrected value only for generating corrected fragmented
+Verbose mode: 1
+DIA-NN will use PyTorch as Neural Network engine 
+S3 response timeout: 300[s]
+Using MBR RT window = 1.000000min
+Id discard level set to: 0.2
+Thread number set to 16
+Neural Network thread number set to 16
+Using library: /tmp/input/spectral-library.tsv
+Using Fasta file: /tmp/input/fasta-db.fasta
+File 'HeLa_50ng_2ACN01TFA_0015DDM_2uL_VNeo_Aurora15_16_23p65m150nlv18Zebra_DIA75msW83_TT0000230_B-A1_1_14631' will be processed
+DIA-NN will save output to: /tmp/outputs/results.tsv
+S3 mode: ON
+Disable Gausian correlation when computing best fragment
+Enable using strict Mobility limits when selecting peaks
+Mass accuracy will be fixed to 2e-05 (MS2) and 1.5e-05 (MS1)
+
+1 files will be processed
+[0:00] Loading spectral library /tmp/input/spectral-library.tsv
+WARNING: duplicated fragments detected for precursor LGKPSLVR3, skipping
+WARNING: duplicated fragments detected for precursor LGKPSLVR3, skipping
+WARNING: duplicated fragments detected for precursor LGKPSLVR3, skipping
+WARNING: duplicated fragments detected for precursor GPPPPR2, skipping
+WARNING: duplicated fragments detected for precursor GPPPPR2, skipping
+WARNING: duplicated fragments detected for precursor GPPPPR2, skipping
+WARNING: duplicated fragments detected for precursor RGAGLR2, skipping
+WARNING: duplicated fragments detected for precursor RGAGLR2, skipping
+WARNING: duplicated fragments detected for precursor RGAGLR2, skipping
+WARNING: duplicated fragments detected for precursor LGLKSLVSK3, skipping
+WARNING: more duplicated fragments detected. Skipping all duplicates without further warnings
+[0:12] Finding proteotypic peptides (assuming that the list of UniProt ids provided for each peptide is complete)
+[0:13] Spectral library loaded: 13103 protein isoforms, 13103 protein groups and 573610 precursors in 513182 elution groups.
+[0:13] Loading FASTA /tmp/input/fasta-db.fasta
+[1:21] Reannotating library precursors with information from the FASTA database
+[2:00] Finding proteotypic peptides (assuming that the list of UniProt ids provided for each peptide is complete)
+[2:00] 573610 precursors generated
+[2:00] Protein names missing for some isoforms
+[2:00] Gene names missing for some isoforms
+[2:00] Library contains 14112 proteins, and 14065 genes
+[2:00] Initialising library
+[2:01] Saving the library to /tmp/input/spectral-library.tsv.speclib
+
+[2:01] File #1/1
+[2:01] Loading run /tmp/input/msframe.bdia
+[2:08] 567329 library precursors are potentially detectable
+[2:08] Processing...
+[2:08] Calibrating ...
+[2:18] Recalibrating ...
+[2:39] Calibration iteration 3
+[2:39] Calibration iteration 4
+[2:39] RT window set to 1.88081
+[2:39] Peak width: 4.524
+[2:39] Scan window radius set to 10
+[2:39] Calibrating ... DONE
+[2:39] Using mass accuracy 2e-05, 1.5e-05 (MS2, MS1)
+[2:39] Starting batch processing ...
+[2:46] Re-using best weights ...
+[2:46] Setting best weights ...
+[2:46] LDA On
+[2:46] Preparing for NN ...
+[7:04] Removing interfering precursors
+[7:04] Quantifying all entries ...
+[7:11] Training the neural network: 189235 targets, 404183 decoys
+[7:11] Top LDA results : 76767 saved
+[7:11] Using PyTorch
+[7:12] Training on CPU.
+[7:12] Thresholds for training. Top threshold: 1.75325, bottom threshold: 0.926441
+[7:12] Thresholds for testing. Top threshold: 1.66882, bottom threshold: 0.964448
+[7:12] Stats for: training, T count: 145243, D count: 92125
+[7:12] Stats for: testing, T count: 17680, D count: 29794
+[7:12] MIN cscore: -0.528031, MAX cscore: 5.55665
+[7:12] All samples count: 593418, samples above threshold: 237368
+[7:12] Used samples %: 40
+[7:14] Samples for training: 237368, samples for testing: 47474
+[7:17] Epoch 1 train loss = 0.365807, test loss = 0.38572, test success: 0.653495
+[7:20] Epoch 2 train loss = 0.295414, test loss = 0.382588, test success: 0.654906
+[7:24] Epoch 3 train loss = 0.28951, test loss = 0.380892, test success: 0.656591
+[7:27] Epoch 4 train loss = 0.285566, test loss = 0.379526, test success: 0.656738
+[7:30] Epoch 5 train loss = 0.282439, test loss = 0.377769, test success: 0.657244
+[7:36] Correct prediction ratio = 0.861428
+[7:36] Thresholds for training. Top threshold: 0.464207, bottom threshold: 2.19488e-05
+[7:36] Thresholds for testing. Top threshold: 0.419249, bottom threshold: 4.61779e-05
+[7:36] Stats for: training, T count: 146788, D count: 90580
+[7:36] Stats for: testing, T count: 14779, D count: 32695
+[7:36] MIN cscore: 1.15662e-15, MAX cscore: 0.997313
+[7:36] All samples count: 593418, samples above threshold: 237368
+[7:36] Used samples %: 40
+[7:38] Samples for training: 237368, samples for testing: 47474
+[7:41] Epoch 1 train loss = 0.275294, test loss = 0.353459, test success: 0.665059
+[7:45] Epoch 2 train loss = 0.268828, test loss = 0.345214, test success: 0.668155
+[7:48] Epoch 3 train loss = 0.265026, test loss = 0.340808, test success: 0.673063
+[7:48] Scoring with PyTorch network...
+[7:56] Number of IDs at 0.01 FDR: 94940
+[7:56] Merged top LDA results : 37692
+[7:57] Calculating protein q-values
+[7:57] Number of genes identified at 1% FDR: 7996 (precursor-level), 7381 (protein-level) (inference performed using proteotypic peptides only)
+[7:57] Quantification
+[7:57] Quantifying all entries ...
+[8:00] Quant file Q-value threshold = 0.02
+[8:00] Rejected entries by qvalue threashold : 87709
+[8:00] Quantification information saved to /tmp/input/msframe.bdia.quant.
+
+[8:01] Cross-run analysis
+[8:01] Reading quantification information: 1 files
+[8:01] Quantifying peptides
+[8:01] Assembling protein groups
+[8:02] Quantifying proteins
+[8:02] Calculating q-values for protein and gene groups
+[8:02] Writing report
+[8:07] Report saved to /tmp/outputs/results.tsv.
+[8:07] Saving precursor levels matrix
+[8:07] Precursor levels matrix (1% precursor and protein group FDR) saved to /tmp/outputs/results.pr_matrix.tsv.
+[8:07] Saving protein group levels matrix
+[8:07] Protein group levels matrix (1% precursor FDR and protein group FDR) saved to /tmp/outputs/results.pg_matrix.tsv.
+[8:07] Saving protein group levels matrix
+[8:07] Protein group levels matrix (1% precursor FDR and protein group FDR) saved to /tmp/outputs/results.pg_max_lfq_matrix.tsv.
+[8:07] Saving gene group levels matrix
+[8:07] Gene groups levels matrix (1% precursor FDR and gene group FDR) saved to /tmp/outputs/results.gg_max_lfq_matrix.tsv.
+[8:07] Saving gene group levels matrix
+[8:07] Gene groups levels matrix (1% precursor FDR and gene group FDR) saved to /tmp/outputs/results.gg_matrix.tsv.
+[8:07] Saving unique genes levels matrix
+[8:07] Unique genes levels matrix (1% precursor FDR and unique protein FDR) saved to /tmp/outputs/results.unique_genes_matrix.tsv.
+[8:07] Stats report saved to /tmp/outputs/results.stats.tsv
+[8:07] Writing gene report
+[8:07] Gene report saved to /tmp/outputs/results.genes.tsv.
+[8:07] Chromatogram build count = 1007983

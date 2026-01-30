@@ -122,6 +122,19 @@ class MSMethod:
                 permname = child.attrib['permname']
                 params[permname] = self._parse_parameter(child)
 
+        # Also parse timetable segment parameters from method section
+        method_elem = self.root.find('.//method/qtofimpactemacq')
+        if method_elem is not None:
+            timetable_elem = method_elem.find('timetable')
+            if timetable_elem is not None:
+                for segment in timetable_elem.findall('segment'):
+                    for param_elem in segment:
+                        if param_elem.tag.startswith('para_') and 'permname' in param_elem.attrib:
+                            permname = param_elem.attrib['permname']
+                            # Only add if not already present (instrument params take precedence)
+                            if permname not in params:
+                                params[permname] = self._parse_parameter(param_elem)
+
         return params
 
     def _parse_polarity_configs(self) -> Dict[str, Dict[str, Any]]:
@@ -143,22 +156,37 @@ class MSMethod:
         if instrument_elem is None:
             return configs
 
-        # Find all dependent elements
-        for dependent_elem in instrument_elem.findall('dependent'):
-            polarity = dependent_elem.get('polarity', '')
-            source = dependent_elem.get('source', 'default')
+        # Find all dependent elements recursively
+        def parse_dependent_recursive(elem, parent_polarity='', parent_source='default'):
+            """Recursively parse dependent elements and their parameters."""
+            # Get polarity and source from this element, fallback to parent values
+            polarity = elem.get('polarity', parent_polarity)
+            source = elem.get('source', parent_source)
 
-            if polarity not in configs:
+            # Initialize config if needed
+            if polarity and polarity not in configs:
                 configs[polarity] = {}
 
-            # Parse parameters for this polarity/source combination
+            # Parse parameters at this level
             params = {}
-            for child in dependent_elem:
+            for child in elem:
                 if child.tag.startswith('para_') and 'permname' in child.attrib:
                     permname = child.attrib['permname']
                     params[permname] = self._parse_parameter(child)
+                elif child.tag == 'dependent':
+                    # Recursively parse nested dependent element
+                    parse_dependent_recursive(child, polarity, source)
 
-            configs[polarity][source] = params
+            # Store parameters if we have a valid polarity
+            if polarity and params:
+                if source in configs[polarity]:
+                    configs[polarity][source].update(params)
+                else:
+                    configs[polarity][source] = params
+
+        # Start parsing from all top-level dependent elements
+        for dependent_elem in instrument_elem.findall('dependent'):
+            parse_dependent_recursive(dependent_elem)
 
         return configs
 
@@ -187,6 +215,47 @@ class MSMethod:
         if polarity in self.polarity_configs:
             if source in self.polarity_configs[polarity]:
                 return self.polarity_configs[polarity][source].get(param_name)
+
+        return None
+
+    def get_ims_imex_ramp_time(self, polarity: str = 'positive') -> Optional[float]:
+        """
+        Get IMS_imeX_RampTime for a specific polarity.
+
+        This parameter is a vector stored in nested dependent elements in the method section.
+        Returns the 4th value (index 3) from the vector, which corresponds
+        to the ramp time in milliseconds.
+
+        Parameters:
+        -----------
+        polarity : str
+            'positive' or 'negative' (default: 'positive')
+
+        Returns:
+        --------
+        Optional[float]
+            Ramp time in milliseconds, or None if not found
+        """
+        # Look in method section, not instrument section
+        method_elem = self.root.find('.//method/qtofimpactemacq')
+        if method_elem is None:
+            return None
+
+        # Search for the parameter in dependent elements with matching polarity
+        for dependent in method_elem.findall('.//dependent'):
+            dep_polarity = dependent.get('polarity', '')
+            dep_source = dependent.get('source', 'default')
+            if dep_polarity == polarity and dep_source == 'default':
+                # Look for IMS_imeX_RampTime vector
+                ramp_time_elem = dependent.find('.//para_vec_double[@permname="IMS_imeX_RampTime"]')
+                if ramp_time_elem is not None:
+                    entries = ramp_time_elem.findall('entry_double')
+                    if len(entries) >= 4:
+                        try:
+                            # Return the 4th value (index 3)
+                            return float(entries[3].attrib['value'])
+                        except (ValueError, KeyError):
+                            pass
 
         return None
 

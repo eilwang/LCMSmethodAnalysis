@@ -13,6 +13,8 @@ import pandas as pd
 from pathlib import Path
 from typing import Dict, Optional, Any, List
 
+from method_path_resolver import MethodPathResolver
+
 
 class SynchroSettings:
     """Parse and provide structured access to synchronization settings."""
@@ -24,16 +26,23 @@ class SynchroSettings:
         Parameters:
         -----------
         method_path : str
-            Path to the .m method directory or synchroSettings.syncsqlite file
+            Path to the .m method directory, synchroSettings.syncsqlite file,
+            or path to a .zip file containing the method directory
         """
-        self.method_path = Path(method_path)
+        self.original_path = Path(method_path)
 
-        # If path is to the database file itself, use it directly
-        if self.method_path.suffix == '.syncsqlite':
-            self.db_path = self.method_path
+        # Create path resolver to handle both zipped and unzipped methods
+        self.resolver = MethodPathResolver(method_path)
+
+        # Resolve the method directory
+        method_dir = self.resolver.resolve()
+
+        # If original path was to the database file itself, use it directly
+        if self.original_path.suffix == '.syncsqlite':
+            self.db_path = method_dir.parent / self.original_path.name
         else:
             # Path is to the .m directory
-            self.db_path = self.method_path / 'synchroSettings.syncsqlite'
+            self.db_path = method_dir / 'synchroSettings.syncsqlite'
 
         if not self.db_path.exists():
             raise FileNotFoundError(f"Database file not found: {self.db_path}")
@@ -196,6 +205,23 @@ class SynchroSettings:
                         summary_lines.append(f"    Columns: {cols}")
 
         return '\n'.join(summary_lines)
+
+    def cleanup(self):
+        """Clean up temporary files if method was loaded from zip."""
+        if self.resolver:
+            self.resolver.cleanup()
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - cleanup temp files."""
+        self.cleanup()
+
+    def __del__(self):
+        """Destructor - cleanup temp files."""
+        self.cleanup()
 
     def __repr__(self):
         if self.is_empty:

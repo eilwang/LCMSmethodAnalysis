@@ -178,7 +178,7 @@ class DIASettings:
 
     def get_cycle_ids(self) -> list:
         """
-        Get list of unique cycle IDs.
+        Get list of unique cycle IDs (includes both MS1 and MS2/DIA windows).
 
         Returns:
         --------
@@ -186,6 +186,20 @@ class DIASettings:
             Sorted list of cycle IDs
         """
         return sorted(self.windows['CycleId'].dropna().unique().tolist())
+
+    def get_dia_cycle_ids(self) -> list:
+        """
+        Get list of unique cycle IDs for DIA/MS2 windows only (excludes MS1).
+
+        Returns:
+        --------
+        list
+            Sorted list of cycle IDs from DIA/MS2 windows only
+        """
+        dia_windows = self.get_dia_windows()
+        if len(dia_windows) > 0:
+            return sorted(dia_windows['CycleId'].dropna().unique().tolist())
+        return []
 
     def to_dict(self) -> Dict[str, Any]:
         """

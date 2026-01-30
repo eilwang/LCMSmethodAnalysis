@@ -1,0 +1,40 @@
+These changes have been performed during method conversion (after this backup was created):
+
+---Otof method changes---
+---Minor---
+Removed IMS_Cycle_TransferTime (polarity = Positive): 2.000000
+Removed IMS_Cycle_TransferTime (polarity = Negative): 2.000000
+Added IMS_Cycle_TransferTime: 2.000000
+    Transfer time becomes polarity independent. Add it from removed polarity 'Positive' with a value of 2.
+Removed IMS_ATS_Cycle_TransferTime (polarity = Positive): 4.000000
+Removed IMS_ATS_Cycle_TransferTime (polarity = Negative): 4.000000
+Added IMS_ATS_Cycle_TransferTime: 4.000000
+    Transfer time becomes polarity independent. Add it from removed polarity 'Positive' with a value of 4 for TIMS Stepping.
+Added TransferBQ_Bias_Set (polarity = Positive): 26.000000
+Added TransferBQ_Bias_Set (polarity = Negative): 26.000000
+Added TransferBQ_Acceleration_Set (polarity = Positive): 0.000000
+Added TransferBQ_Acceleration_Set (polarity = Negative): 0.000000
+Added TOF_DetectorTofInSetValue: 0.000000
+Added MSMS_Pasef_IsolationPeakSelection (Segment 0): 0
+Added Source_CapillarySetValue (polarity = Positivesource = dart, Segment 0): 0
+Added Source_CapillarySetValue (polarity = Negativesource = dart, Segment 0): 0
+Added Source_EndPlateOffsetSetValue (source = dart, Segment 0): 0
+Added Source_CoronaSetValue (polarity = Positivesource = dart, Segment 0): 0
+Added Source_CoronaSetValue (polarity = Negativesource = dart, Segment 0): 0
+Added Source_NebulizerSetValue (source = dart, Segment 0): 0.000000
+Added Source_NanoBoosterSetValue (source = dart, Segment 0): 0.000000
+Added Source_APCIHeaterSetValue (source = dart, Segment 0): 0.000000
+Added Source_ActiveExhaustSetValue (source = dart, Segment 0): 0
+Added Source_SheathGasFlowEnableSetValue (source = dart, Segment 0): 0
+Added Source_SheathGasFlowSetValue (source = dart, Segment 0): 0.000000
+Added Source_DryGasSetValue (polarity = Positivesource = dart, Segment 0): 1.500000
+Added Source_DryGasSetValue (polarity = Negativesource = dart, Segment 0): 1.500000
+Added Source_DryHeaterSetValue (source = dart, Segment 0): 150.000000
+Other IMSICC_Active
+    Renamed IMSICC_Active to IMSICC_Mode
+Added IMSICC_ICC2_MaxTicTargetPercent (Segment 0): 90.000000
+Added IMSICC_ICC2_MinAccuTime (Segment 0): 2.000000
+Added IMSICC_ICC2_SmoothingFactor (Segment 0): 2
+Added IMSICC_ICC2_ReferenceTicCapacity (Segment 0): 40000000.000000
+Other : 150 --> 160
+    Increase the method version number

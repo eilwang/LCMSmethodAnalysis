@@ -2,28 +2,46 @@
 import pandas as pd
 import re
 from typing import Dict, List, Optional, Any
-import pandas as pd
+from pathlib import Path
 import olefile
+
+from method_path_resolver import MethodPathResolver
 
 class LCMethod:
     """Parse and provide structured access to LC method parameters."""
 
     def __init__(self, meth_path: str):
         """
-        Initialize with method text.
+        Initialize with method file path.
 
         Parameters:
         -----------
-        text : str
-            Raw method text from .meth file
+        meth_path : str
+            Path to .meth file or .zip file containing .meth file
         """
-        self.meth_path = meth_path
+        self.original_path = Path(meth_path)
+
+        # Create path resolver to handle both .meth files and zip archives
+        self.resolver = MethodPathResolver(meth_path)
+
+        # Resolve the path
+        self.meth_path = self.resolver.resolve()
+
+        # If original path was to a zip, find the .meth file inside
+        if self.original_path.suffix == '.zip':
+            # Look for .meth files in resolved directory
+            meth_files = list(self.meth_path.glob('*.meth'))
+            if meth_files:
+                self.meth_path = meth_files[0]
+            else:
+                raise FileNotFoundError(f"No .meth file found in zip: {self.original_path}")
+
         self.runtime, self.params, self.gradient, self.equil = self._parse_method()
 
     def read_meth(self) -> str:
-        methole = olefile.OleFileIO(self.meth_path)
+        methole = olefile.OleFileIO(str(self.meth_path))
         text = methole.openstream(['SiiXcalibur', 'Text']).read().decode('utf-16')
-
+        methole.close()
         return text
 
     def get_keyvalue(self, line):
@@ -112,6 +130,23 @@ class LCMethod:
             equil_df[col] = pd.to_numeric(equil_df[col], errors='ignore')
 
         return float(sections['Run time [min]']), sections['Instrument Setup'], gradient_df, equil_df
+
+    def cleanup(self):
+        """Clean up temporary files if method was loaded from zip."""
+        if self.resolver:
+            self.resolver.cleanup()
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - cleanup temp files."""
+        self.cleanup()
+
+    def __del__(self):
+        """Destructor - cleanup temp files."""
+        self.cleanup()
 
 
 

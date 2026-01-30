@@ -42,40 +42,53 @@ class BrukerMethod:
         Parameters:
         -----------
         method_path : str
-            Path to the .m method directory
+            Path to the .m method directory or path to a .zip file containing
+            the method directory
         parse_synchro : bool
             Whether to parse synchroSettings (default: False)
         """
         self.method_path = Path(method_path)
 
+        # Validate path exists (either as directory or zip file)
         if not self.method_path.exists():
-            raise FileNotFoundError(f"Method directory not found: {self.method_path}")
+            # Check if there's a zip file with the same base name
+            potential_zip = self.method_path.with_suffix('.zip')
+            if not potential_zip.exists():
+                raise FileNotFoundError(f"Method directory or zip file not found: {self.method_path}")
 
         # Parse MS instrument parameters (always present)
+        # MSMethod now handles zip files internally
         self.ms = MSMethod(self.method_path)
 
         # Parse DIA settings (if present)
-        dia_db_path = self.method_path / 'diaSettings.diasqlite'
-        if dia_db_path.exists():
-            try:
-                self.dia = DIASettings(self.method_path)
-            except Exception as e:
-                print(f"Warning: Could not parse DIA settings: {e}")
+        # Create resolver to check if DIA settings exist
+        resolver = MethodPathResolver(self.method_path)
+        try:
+            if resolver.exists('diaSettings.diasqlite'):
+                try:
+                    self.dia = DIASettings(self.method_path)
+                except Exception as e:
+                    print(f"Warning: Could not parse DIA settings: {e}")
+                    self.dia = None
+            else:
                 self.dia = None
-        else:
-            self.dia = None
+        finally:
+            resolver.cleanup()
 
         # Parse synchro settings (optional)
         if parse_synchro:
-            synchro_db_path = self.method_path / 'synchroSettings.syncsqlite'
-            if synchro_db_path.exists():
-                try:
-                    self.synchro = SynchroSettings(self.method_path)
-                except Exception as e:
-                    print(f"Warning: Could not parse synchro settings: {e}")
+            resolver = MethodPathResolver(self.method_path)
+            try:
+                if resolver.exists('synchroSettings.syncsqlite'):
+                    try:
+                        self.synchro = SynchroSettings(self.method_path)
+                    except Exception as e:
+                        print(f"Warning: Could not parse synchro settings: {e}")
+                        self.synchro = None
+                else:
                     self.synchro = None
-            else:
-                self.synchro = None
+            finally:
+                resolver.cleanup()
         else:
             self.synchro = None
 
@@ -115,6 +128,10 @@ class BrukerMethod:
     def get_tof_params(self, polarity: str = 'negative') -> Dict[str, Any]:
         """Get TOF (Time of Flight) parameters."""
         return self.ms.get_tof_params(polarity)
+
+    def get_ims_imex_ramp_time(self, polarity: str = 'positive') -> Optional[Any]:
+        """Get IMS_imeX_RampTime parameter."""
+        return self.ms.get_ims_imex_ramp_time(polarity)
 
     # ========================================================================
     # Convenience methods for DIA settings
@@ -166,7 +183,7 @@ class BrukerMethod:
 
     def get_cycle_ids(self) -> Optional[list]:
         """
-        Get list of unique cycle IDs.
+        Get list of unique cycle IDs (includes both MS1 and MS2/DIA windows).
 
         Returns:
         --------
@@ -176,6 +193,19 @@ class BrukerMethod:
         if self.dia is None:
             return None
         return self.dia.get_cycle_ids()
+
+    def get_dia_cycle_ids(self) -> Optional[list]:
+        """
+        Get list of unique cycle IDs for DIA/MS2 windows only (excludes MS1).
+
+        Returns:
+        --------
+        Optional[list]
+            Sorted list of cycle IDs from DIA windows only, or None if DIA settings not available
+        """
+        if self.dia is None:
+            return None
+        return self.dia.get_dia_cycle_ids()
 
     def plot_windows(self, ax=None, show_labels: bool = True,
                      color_by_cycle: bool = True, uniform_color: str = 'steelblue',
@@ -298,9 +328,9 @@ class BrukerMethod:
                 if dia_windows['CollisionEnergy'].notna().any():
                     summary_lines.append(f"  Collision Energy: {dia_windows['CollisionEnergy'].min():.1f} - {dia_windows['CollisionEnergy'].max():.1f} eV")
 
-            cycle_ids = self.get_cycle_ids()
-            if cycle_ids:
-                summary_lines.append(f"  Unique cycles: {len(cycle_ids)} ({min(cycle_ids)} - {max(cycle_ids)})")
+            dia_cycle_ids = self.get_dia_cycle_ids()
+            if dia_cycle_ids:
+                summary_lines.append(f"  DIA PASEF cycles: {len(dia_cycle_ids)} ({min(dia_cycle_ids)} - {max(dia_cycle_ids)})")
         else:
             summary_lines.append("\n" + "=" * 80)
             summary_lines.append("DIA ACQUISITION SETTINGS: Not Available")
@@ -323,6 +353,27 @@ class BrukerMethod:
         summary_lines.append("\n" + "=" * 80)
 
         return '\n'.join(summary_lines)
+
+    def cleanup(self):
+        """Clean up temporary files if method was loaded from zip."""
+        if self.ms:
+            self.ms.cleanup()
+        if self.dia:
+            self.dia.cleanup()
+        if self.synchro:
+            self.synchro.cleanup()
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - cleanup temp files."""
+        self.cleanup()
+
+    def __del__(self):
+        """Destructor - cleanup temp files."""
+        self.cleanup()
 
     def __repr__(self):
         dia_status = f"DIA={len(self.dia.windows)} windows" if self.dia else "DIA=None"

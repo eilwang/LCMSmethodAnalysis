@@ -78,19 +78,113 @@ class LCMethodCollection:
 
     def add_methods_from_folder(self, folder_path: str, overwrite: bool = False):
         """
-        Add multiple methods from a folder containing .meth files.
+        Add multiple methods from a folder or zip file.
+
+        Can accept:
+        - A folder containing .meth files and/or .zip files
+        - A zip file directly (will extract all methods inside)
+
+        For .zip files containing multiple methods:
+        - Each method is loaded with its own name
 
         Parameters:
         -----------
         folder_path : str
-            Path to folder containing .meth files
+            Path to folder containing .meth files or .zip files, OR
+            Path to a .zip file containing multiple .meth files
         overwrite : bool
             If True, overwrite existing methods with same names.
             If False, raise error if any method already exists.
         """
-        folder = Path(folder_path)
+        import zipfile
+        import tempfile
+
+        path = Path(folder_path)
+        all_methods = {}
+
+        # Check if the path itself is a zip file
+        if path.suffix == '.zip' and path.is_file():
+            # Process the zip file directly
+            try:
+                with zipfile.ZipFile(path, 'r') as zf:
+                    # Find all .meth files in the zip
+                    meth_in_zip = [name for name in zf.namelist()
+                                  if name.endswith('.meth') and not name.startswith('__MACOSX')]
+
+                    if len(meth_in_zip) == 0:
+                        print(f"Warning: No .meth files found in {path.name}")
+                        return
+
+                    # Extract to temp directory
+                    temp_dir = tempfile.mkdtemp(prefix='lc_methods_')
+                    try:
+                        zf.extractall(temp_dir)
+
+                        # Add each method found in the zip
+                        for meth_name in meth_in_zip:
+                            # Get clean name (remove path components)
+                            clean_name = Path(meth_name).stem
+                            full_path = Path(temp_dir) / meth_name
+
+                            if full_path.exists():
+                                all_methods[clean_name] = str(full_path)
+                    except Exception as e:
+                        print(f"Warning: Error extracting methods from {path.name}: {e}")
+            except zipfile.BadZipFile:
+                print(f"Warning: {path.name} is not a valid zip file")
+                return
+
+            self.add_methods_from_paths(all_methods, overwrite=overwrite)
+            return
+
+        # Otherwise, treat as a folder
+        folder = path
+        if not folder.is_dir():
+            raise ValueError(f"Path is not a folder or zip file: {folder_path}")
+
+        # Find .meth files directly in folder
         meth_files = {f.stem: str(f) for f in folder.glob("*.meth")}
-        self.add_methods_from_paths(meth_files, overwrite=overwrite)
+        all_methods.update(meth_files)
+
+        # Find .zip files and extract methods from inside them
+        for zip_file in folder.glob("*.zip"):
+            try:
+                with zipfile.ZipFile(zip_file, 'r') as zf:
+                    # Find all .meth files in the zip
+                    meth_in_zip = [name for name in zf.namelist()
+                                  if name.endswith('.meth') and not name.startswith('__MACOSX')]
+
+                    if len(meth_in_zip) == 0:
+                        print(f"Warning: No .meth files found in {zip_file.name}")
+                        continue
+
+                    # Extract to temp directory
+                    temp_dir = tempfile.mkdtemp(prefix='lc_methods_')
+                    try:
+                        zf.extractall(temp_dir)
+
+                        # Add each method found in the zip
+                        for meth_name in meth_in_zip:
+                            # Get clean name (remove path components)
+                            clean_name = Path(meth_name).stem
+                            full_path = Path(temp_dir) / meth_name
+
+                            if full_path.exists():
+                                # If this zip only has one method, use zip name
+                                if len(meth_in_zip) == 1:
+                                    method_name = zip_file.stem
+                                else:
+                                    method_name = clean_name
+
+                                all_methods[method_name] = str(full_path)
+                    except Exception as e:
+                        print(f"Warning: Error extracting methods from {zip_file.name}: {e}")
+                        continue
+            except zipfile.BadZipFile:
+                print(f"Warning: {zip_file.name} is not a valid zip file, skipping")
+                continue
+
+        self.add_methods_from_paths(all_methods, overwrite=overwrite)
         
     def get_method(self, name: str) -> Optional[LCMethod]:
         """Get method by name."""
@@ -126,9 +220,12 @@ class LCMethodCollection:
             })
         return pd.DataFrame(summary_data)
 
-    def compare_gradients(self, method_names: Optional[List[str]] = None) -> pd.DataFrame:
+    def compare_setup(self, method_names: Optional[List[str]] = None) -> pd.DataFrame:
         """
-        Compare gradient profiles across methods.
+        Compare all method setup parameters across methods.
+
+        Includes runtime and all method parameters (params dict).
+        Returns a wide-format DataFrame with parameters as rows and methods as columns.
 
         Parameters:
         -----------
@@ -138,7 +235,70 @@ class LCMethodCollection:
         Returns:
         --------
         pd.DataFrame
-            Combined gradient table with method names
+            Wide-format DataFrame with parameters as index and methods as columns
+
+        Example:
+        --------
+        collection = LCMethodCollection()
+        collection.add_method('method1', 'path/to/method1.meth')
+        collection.add_method('method2', 'path/to/method2.meth')
+
+        # Compare all parameters
+        comparison = collection.compare_setup()
+        print(comparison)
+
+        # Compare specific methods
+        comparison = collection.compare_setup(['method1', 'method2'])
+        """
+        if method_names is None:
+            method_names = self.list_methods()
+
+        if not method_names:
+            return pd.DataFrame()
+
+        # Collect all unique parameter keys across all methods
+        all_param_keys = set()
+        for name in method_names:
+            if name in self.methods:
+                all_param_keys.update(self.methods[name].params.keys())
+
+        # Sort parameter keys for consistent ordering
+        param_keys = ['Runtime [min]'] + sorted(all_param_keys)
+
+        # Build comparison data
+        data = {}
+        for name in method_names:
+            if name in self.methods:
+                method = self.methods[name]
+                column_data = {}
+
+                # Add runtime
+                column_data['Runtime [min]'] = method.runtime
+
+                # Add all params
+                for key in all_param_keys:
+                    column_data[key] = method.params.get(key, None)
+
+                data[name] = column_data
+
+        # Create DataFrame
+        df = pd.DataFrame(data, index=param_keys)
+
+        return df
+
+    def compare_gradients(self, method_names: Optional[List[str]] = None) -> pd.DataFrame:
+        """
+        Compare gradient profiles across methods (long format).
+
+        Parameters:
+        -----------
+        method_names : List[str], optional
+            Methods to compare. If None, compare all methods.
+
+        Returns:
+        --------
+        pd.DataFrame
+            Combined gradient table with method names in long format
         """
         if method_names is None:
             method_names = self.list_methods()
@@ -153,6 +313,280 @@ class LCMethodCollection:
         if all_gradients:
             return pd.concat(all_gradients, ignore_index=True)
         return pd.DataFrame()
+
+    def compare_gradients_wide(self, method_names: Optional[List[str]] = None,
+                               columns: Optional[List[str]] = None) -> Dict[str, pd.DataFrame]:
+        """
+        Compare gradient profiles in wide format (side-by-side).
+
+        For each gradient column (e.g., %B, Flow), creates a separate DataFrame
+        with time points as rows and methods as columns.
+
+        Parameters:
+        -----------
+        method_names : List[str], optional
+            Methods to compare. If None, compare all methods.
+        columns : List[str], optional
+            Specific gradient columns to compare. If None, compares all numeric columns.
+
+        Returns:
+        --------
+        Dict[str, pd.DataFrame]
+            Dictionary mapping column names to comparison DataFrames
+            Each DataFrame has time points as rows and methods as columns
+
+        Example:
+        --------
+        result = collection.compare_gradients_wide(['method1', 'method2'])
+        print(result['%B'])  # Compare %B across time
+        """
+        if method_names is None:
+            method_names = self.list_methods()
+
+        if not method_names:
+            return {}
+
+        # Identify columns to compare
+        first_method = self.methods[method_names[0]]
+
+        # Find time column (case-insensitive)
+        time_col = None
+        for col in first_method.gradient.columns:
+            if 'time' in col.lower():
+                time_col = col
+                break
+
+        if time_col is None:
+            print("Warning: Could not find time column")
+            return {}
+
+        if columns is None:
+            # Use all numeric gradient columns except time
+            columns = [col for col in first_method.gradient.columns
+                      if col != time_col and
+                      pd.api.types.is_numeric_dtype(first_method.gradient[col])]
+
+        # Build comparison for each column
+        comparisons = {}
+        for col in columns:
+            data = {}
+            for name in method_names:
+                if name in self.methods:
+                    method = self.methods[name]
+                    # Find time column in this method (may vary)
+                    method_time_col = None
+                    for c in method.gradient.columns:
+                        if 'time' in c.lower():
+                            method_time_col = c
+                            break
+
+                    if method_time_col and col in method.gradient.columns:
+                        data[name] = pd.Series(
+                            method.gradient[col].values,
+                            index=method.gradient[method_time_col].values
+                        )
+
+            if data:
+                df = pd.DataFrame(data)
+                df.index.name = time_col
+                comparisons[col] = df
+
+        return comparisons
+
+    def plot_gradients(self, method_names: Optional[List[str]] = None,
+                      x_col: Optional[str] = None,
+                      y_cols: Optional[Union[str, List[str]]] = None,
+                      twin_axes: bool = False,
+                      markers: bool = False,
+                      figsize=(12, 6),
+                      ax=None):
+        """
+        Plot gradient profiles from multiple methods overlaid.
+
+        Parameters:
+        -----------
+        method_names : List[str], optional
+            Methods to plot. If None, plots all methods.
+        x_col : str, optional
+            Column to use for x-axis. If None, uses time column (case-insensitive search).
+        y_cols : str or List[str], optional
+            Column(s) to plot on y-axis. If None, plots %B by default.
+            Can be a single column name or list of column names.
+            Examples: 'Neo.PumpModule.Pump.%B.Value [%]' or
+                     ['Neo.PumpModule.Pump.%B.Value [%]', 'Neo.PumpModule.Pump.Flow.Nominal [µl/min]']
+        twin_axes : bool
+            If True and multiple y_cols are provided, creates separate y-axes for each column.
+            First column uses left y-axis, second uses right y-axis (twinx).
+            Useful when y columns have different scales. (default: False)
+        markers : bool
+            If True, adds small circular markers with white outlines at each data point.
+            Useful for visualizing gradient steps. (default: False)
+        figsize : tuple
+            Figure size (default: (12, 6)), only used if ax is None
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot on. If None, creates a new figure.
+
+        Returns:
+        --------
+        matplotlib.axes.Axes or tuple
+            If twin_axes=False: returns the main axis
+            If twin_axes=True: returns tuple of axes
+        Examples:
+        ---------
+        # Plot time vs %B (default)
+        collection.plot_gradients()
+
+        # Plot time vs flow rate
+        collection.plot_gradients(y_cols='Neo.PumpModule.Pump.Flow.Nominal [µl/min]')
+
+        # Plot time vs multiple columns
+        collection.plot_gradients(y_cols=['Neo.PumpModule.Pump.%B.Value [%]',
+                                          'Neo.PumpModule.Pump.Flow.Nominal [µl/min]'])
+
+        # Custom x and y axes
+        collection.plot_gradients(x_col='Neo.PumpModule.Pump.%B.Value [%]',
+                                 y_cols='Neo.PumpModule.Pump.Flow.Nominal [µl/min]')
+
+        # Plot with twin y-axes (different scales)
+        collection.plot_gradients(y_cols=['Neo.PumpModule.Pump.%B.Value [%]',
+                                          'Neo.PumpModule.Pump.Flow.Nominal [µl/min]'],
+                                 twin_axes=True)
+
+        # Plot with markers at data points
+        collection.plot_gradients(markers=True)
+        """
+        import matplotlib.pyplot as plt
+
+        if method_names is None:
+            method_names = self.list_methods()
+
+        if not method_names:
+            print("Warning: No methods to plot")
+            return None
+
+        first_method = self.methods[method_names[0]]
+
+        # Determine x-axis column
+        if x_col is None:
+            # Find time column (case-insensitive)
+            for c in first_method.gradient.columns:
+                if 'time' in c.lower():
+                    x_col = c
+                    break
+            if x_col is None:
+                print("Warning: Could not find time column. Please specify x_col parameter.")
+                return None
+        elif x_col not in first_method.gradient.columns:
+            print(f"Warning: Column '{x_col}' not found in gradient data.")
+            return None
+
+        # Determine y-axis column(s)
+        if y_cols is None:
+            # Try to find %B column
+            b_cols = [col for col in first_method.gradient.columns
+                     if '%B' in col or 'Percent B' in col]
+            if b_cols:
+                y_cols = [b_cols[0]]
+            else:
+                print("Warning: Could not find %B column. Please specify y_cols parameter.")
+                return None
+        elif isinstance(y_cols, str):
+            y_cols = [y_cols]
+
+        # Validate y columns
+        for col in y_cols:
+            if col not in first_method.gradient.columns:
+                print(f"Warning: Column '{col}' not found in gradient data.")
+                return None
+
+        # Create figure if ax not provided
+        created_fig = ax is None
+        if ax is None:
+            fig, ax = plt.subplots(figsize=figsize)
+
+
+        # Create twin axes if requested and multiple y columns
+        axes = [ax]
+        if twin_axes and len(y_cols) > 1:
+            for _ in range(len(y_cols) - 1):
+                axes.append(ax.twinx())
+
+        # Plot each method
+        colors = plt.cm.tab10(range(len(method_names)))
+        for i, name in enumerate(method_names):
+            if name in self.methods:
+                method = self.methods[name]
+
+                # Verify x column exists in this method
+                if x_col not in method.gradient.columns:
+                    print(f"Warning: x_col '{x_col}' not found in method '{name}', skipping")
+                    continue
+
+                for y_idx, y_col in enumerate(y_cols):
+                    if y_col in method.gradient.columns:
+                        # Select which axis to use
+                        if twin_axes and len(y_cols) > 1:
+                            current_ax = axes[y_idx]
+                        else:
+                            current_ax = ax
+
+                        # Create label
+                        if len(y_cols) > 1 and not twin_axes:
+                            y_label_suffix = f" ({y_col.split('.')[-1]})"
+                            label = f"{name}{y_label_suffix}"
+                        else:
+                            label = name
+
+                        # Plot line
+                        plot_kwargs = {
+                            'label': label,
+                            'color': colors[i],
+                            'linewidth': 2,
+                            'alpha': 0.8
+                        }
+
+                        if markers:
+                            plot_kwargs.update({
+                                'marker': 'o',
+                                'markersize': 5,
+                                'markeredgecolor': 'white',
+                                'markeredgewidth': 0.8
+                            })
+
+                        current_ax.plot(method.gradient[x_col],
+                                       method.gradient[y_col],
+                                       **plot_kwargs)
+
+        # Set axis labels
+        xlabel = x_col.split('.')[-1] if '.' in x_col else x_col
+        ax.set_xlabel(xlabel)
+
+        # Set y-axis labels
+        if twin_axes and len(y_cols) > 1:
+            # Set labels for each axis
+            for y_idx, y_col in enumerate(y_cols):
+                ylabel = y_col.split('.')[- 1] if '.' in y_col else y_col
+                axes[y_idx].set_ylabel(ylabel)
+                axes[y_idx].legend(loc=f'upper {"left" if y_idx == 0 else "right"}')
+        else:
+            if len(y_cols) == 1:
+                ylabel = y_cols[0].split('.')[-1] if '.' in y_cols[0] else y_cols[0]
+                ax.set_ylabel(ylabel)
+            else:
+                ax.set_ylabel('Value')
+            ax.legend(loc='best')
+
+        ax.set_title(f'Gradient Comparison: {", ".join(method_names)}')
+        ax.grid(True, alpha=0.3)
+
+        # Only call tight_layout if we created the figure
+        if created_fig:
+            plt.tight_layout()
+
+        # Return appropriate axes
+        if twin_axes and len(y_cols) > 1:
+            return tuple(axes)
+        return ax
 
     def save(self, filepath: str):
         """
