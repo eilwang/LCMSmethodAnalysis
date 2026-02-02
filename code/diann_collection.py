@@ -16,6 +16,8 @@ import pickle
 from pathlib import Path
 from typing import List, Optional, Dict, Tuple
 import warnings
+import sys
+from datetime import datetime
 from anndiannloader import DiannLoader
 
 
@@ -27,7 +29,7 @@ class DiannCollection:
     Each level contains all samples concatenated together.
     """
 
-    def __init__(self, config_path: str = "diann_columns.yaml"):
+    def __init__(self, config_path: str = "diann_columns.yaml", log_file: Optional[str] = None):
         """
         Initialize DIA-NN collection.
 
@@ -35,11 +37,54 @@ class DiannCollection:
         -----------
         config_path : str
             Path to YAML configuration file defining column mappings
+        log_file : str, optional
+            Path to log file. If provided, all print output will be written to this file.
+            If None, output goes to stdout only.
         """
         self.loader = DiannLoader(config_path)
         # Store as dict: {level: AnnData} where each AnnData contains all samples
         self.data: Dict[str, ad.AnnData] = {}
         self.temp_dirs: List[str] = []
+
+        # Set up logging
+        self.log_file = log_file
+        self.log_handle = None
+        if log_file:
+            self.log_handle = open(log_file, 'w')
+            self._log(f"DiannCollection Log - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            self._log("=" * 80)
+
+    def _log(self, message: str, to_stdout: bool = None):
+        """
+        Log a message to log file and optionally stdout.
+
+        Parameters:
+        -----------
+        message : str
+            Message to log
+        to_stdout : bool, optional
+            Whether to also print to stdout. If None (default), prints to stdout
+            only when no log file is configured. When log file is configured,
+            output goes only to the log file.
+        """
+        # If to_stdout is not specified, default based on whether log file is configured
+        if to_stdout is None:
+            to_stdout = self.log_handle is None  # Only print to stdout if no log file
+
+        if to_stdout:
+            print(message)
+
+        if self.log_handle:
+            self.log_handle.write(message + '\n')
+            self.log_handle.flush()
+
+    def close_log(self):
+        """Close the log file if it's open."""
+        if self.log_handle:
+            self._log("\n" + "=" * 80)
+            self._log(f"Log closed - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            self.log_handle.close()
+            self.log_handle = None
 
     def _find_results_files(
         self,
@@ -202,7 +247,7 @@ class DiannCollection:
                 f"Expected structure: {expected_structure[search_type]}"
             )
 
-        print(f"Found {len(results_files)} DIA-NN result files ({search_type} format)")
+        self._log(f"Found {len(results_files)} DIA-NN result files ({search_type} format)")
 
         # Determine which levels to load
         if levels is None:
@@ -213,7 +258,7 @@ class DiannCollection:
 
         # Load each results file at each level
         for sample_name, results_path in results_files:
-            print(f"\nLoading {sample_name}...")
+            self._log(f"\nLoading {sample_name}...")
 
             # Check which levels are available FIRST (more efficient - only reads header)
             available_levels = self.loader.check_available_levels(
@@ -228,10 +273,10 @@ class DiannCollection:
                 # Show warning about missing columns but still attempt to load
                 if not level_info.get('available', False):
                     missing = level_info.get('missing_columns', [])
-                    print(f"  ⚠ Note: {level} level missing some columns: {', '.join(missing[:3])}{'...' if len(missing) > 3 else ''}")
+                    self._log(f"  ⚠ Note: {level} level missing some columns: {', '.join(missing[:3])}{'...' if len(missing) > 3 else ''}")
 
                 try:
-                    print(f"  Loading {level} level...")
+                    self._log(f"  Loading {level} level...")
 
                     # Load with strict=False to be permissive
                     adata = self.loader.load_to_adata(
@@ -251,51 +296,52 @@ class DiannCollection:
                     level_samples[level].append(adata)
 
                     # Print AnnData summary
-                    print(f"    ✓ {level}: {adata.shape}")
-                    print(f"\n{adata}\n")
+                    self._log(f"    ✓ {level}: {adata.shape}")
+                    self._log(f"\n{adata}\n")
 
                 except Exception as e:
                     # Handle errors during loading
                     if not strict:
-                        print(f"    ⚠ Could not load {level} level: {type(e).__name__}")
+                        self._log(f"    ⚠ Could not load {level} level: {type(e).__name__}")
                     else:
                         warnings.warn(f"Error loading {sample_name} at {level} level: {e}")
                     continue
 
         # return level_samples
         # Concatenate samples for each level
-        print("\nCombining samples across levels...")
+        self._log("\nCombining samples across levels...")
         for level in levels:
             if level_samples[level]:  # If we have any samples for this level
-                print(f"  Combining {len(level_samples[level])} samples for {level} level...")
+                self._log(f"  Combining {len(level_samples[level])} samples for {level} level...")
 
+                # Concatenate all new samples for this level
                 if len(level_samples[level]) == 1:
-                    self.data[level] = level_samples[level]
-                
+                    combined = level_samples[level][0]
                 else:
                     combined = ad.concat(level_samples[level],
                         axis=1,  # Concatenate along var (columns/samples) axis
                         join='outer',
                         merge='first'  # Keep first value for non-aligned obs metadata
                     )
-                    if level in self.data.keys():
-                        # Append to existing data
-                        existing = self.data[level]
-                        print(existing)
-                        combined = ad.concat(
-                            [existing, combined],
-                            axis=1,  # Concatenate along var (columns/samples) axis
-                            join='outer',
-                            merge='first'  # Keep first value for non-aligned obs metadata
-                        )
-                    else:
-                        self.data[level] = combined
 
+                # If level already exists in collection, concatenate with existing data
+                if level in self.data:
+                    self._log(f"    Concatenating with existing {level} data...")
+                    existing = self.data[level]
+                    combined = ad.concat(
+                        [existing, combined],
+                        axis=1,  # Concatenate along var (columns/samples) axis
+                        join='outer',
+                        merge='first'  # Keep first value for non-aligned obs metadata
+                    )
                     self.data[level] = combined
+                    self._log(f"    ✓ Combined shape: {self.data[level].shape}")
+                else:
+                    # First time adding this level
+                    self.data[level] = combined
+                    self._log(f"    ✓ Added {level} with shape: {self.data[level].shape}")
 
-                print(f"    ✓ Combined shape: {self.data[level].shape}")
-
-        print(f"\n✓ Added {len(results_files)} samples to collection")
+        self._log(f"\n✓ Added {len(results_files)} samples to collection")
 
     def add_single_search(
         self,
@@ -316,8 +362,9 @@ class DiannCollection:
         -----------
         search_path : str
             Path to search folder (will look for tims-diann.result.zip or result.tsv)
+            OR path to a .tsv file directly (for fragpipe search_type)
         sample_name : str, optional
-            Name for this sample. If None, uses folder name
+            Name for this sample. If None, uses folder name or file stem
         levels : List[str], optional
             Specific levels to load (precursor, protein, gene)
             If None, loads all available levels
@@ -333,42 +380,51 @@ class DiannCollection:
         >>> collection = DiannCollection()
         >>> collection.add_single_search("sample1_folder/", sample_name="sample1")
         >>> collection.add_single_search("sample2_folder/", sample_name="sample2")
+        >>> # For FragPipe, can also provide direct path to .tsv file
+        >>> collection.add_single_search("results.tsv", search_type='fragpipe')
         """
         search_path_obj = Path(search_path)
 
         if not search_path_obj.exists():
             raise FileNotFoundError(f"Path not found: {search_path}")
 
-        if not search_path_obj.is_dir():
-            raise ValueError(f"Path must be a directory: {search_path}")
+        # Check if path is directly a .tsv file
+        if search_path_obj.is_file() and search_path_obj.suffix == '.tsv':
+            # Direct .tsv file path provided
+            results_file_path = search_path_obj
+            detected_sample_name = search_path_obj.stem
+            self._log(f"Loading from direct .tsv file: {results_file_path.name}")
+        elif search_path_obj.is_dir():
+            # Directory path - search for results 
+            # Use _find_results_files to locate the results file
+            results_files = self._find_results_files(search_path_obj, search_type)
 
-        # Use _find_results_files to locate the results file
-        results_files = self._find_results_files(search_path_obj, search_type)
+            if len(results_files) == 0:
+                raise FileNotFoundError(
+                    f"No results files found in {search_path} for search_type='{search_type}'. "
+                    f"Expected structure for {search_type}."
+                )
 
-        if len(results_files) == 0:
-            raise FileNotFoundError(
-                f"No results files found in {search_path} for search_type='{search_type}'. "
-                f"Expected structure for {search_type}."
-            )
+            if len(results_files) > 1:
+                warnings.warn(
+                    f"Found {len(results_files)} results files in {search_path}. "
+                    f"Will load only the first one: {results_files[0][0]}"
+                )
 
-        if len(results_files) > 1:
-            warnings.warn(
-                f"Found {len(results_files)} results files in {search_path}. "
-                f"Will load only the first one: {results_files[0][0]}"
-            )
-
-        # Get the first (and should be only) result file
-        detected_sample_name, results_file_path = results_files[0]
+            # Get the first (and should be only) result file
+            detected_sample_name, results_file_path = results_files[0]
+        else:
+            raise ValueError(f"Path must be a directory or .tsv file: {search_path}")
 
         # Determine sample name
         if sample_name is None:
-            sample_name = detected_sample_name  # Use the detected sample name from folder structure
+            sample_name = detected_sample_name  # Use the detected sample name from folder structure or file stem
 
         # Determine which levels to load
         if levels is None:
             levels = list(self.loader.config['levels'].keys())
 
-        print(f"\nLoading {sample_name} from {results_file_path.name}...")
+        self._log(f"\nLoading {sample_name} from {results_file_path.name}...")
 
         # Check which levels are available
         available_levels = self.loader.check_available_levels(
@@ -386,10 +442,10 @@ class DiannCollection:
             # Show warning about missing columns but still attempt to load
             if not level_info.get('available', False):
                 missing = level_info.get('missing_columns', [])
-                print(f"  ⚠ Note: {level} level missing some columns: {', '.join(missing[:3])}{'...' if len(missing) > 3 else ''}")
+                self._log(f"  ⚠ Note: {level} level missing some columns: {', '.join(missing[:3])}{'...' if len(missing) > 3 else ''}")
 
             try:
-                print(f"  Loading {level} level...")
+                self._log(f"  Loading {level} level...")
 
                 # Load with strict=False to be permissive
                 adata = self.loader.load_to_adata(
@@ -408,44 +464,50 @@ class DiannCollection:
                 # Add to temporary list for potential concatenation
                 level_samples[level].append(adata)
 
-                print(adata.X)
+                self._log(str(adata.X))
 
 
             except Exception as e:
                 # Handle errors during loading
                 if not strict:
-                    print(f"    ⚠ Could not load {level} level: {type(e).__name__}")
+                    self._log(f"    ⚠ Could not load {level} level: {type(e).__name__}")
                 else:
                     raise
 
         # Add or concatenate with existing data
-        print(f"\nAdding to collection...")
+        self._log(f"\nAdding to collection...")
         for level in levels:
-            if len(level_samples[level]) == 0:
-                continue
+            if level_samples[level]:  # If we have any samples for this level
+                self._log(f"  Adding {level} level...")
 
-            print(f"  Adding {level} level...")
+                # Concatenate all new samples for this level (should be 1 for single search)
+                if len(level_samples[level]) == 1:
+                    combined = level_samples[level][0]
+                else:
+                    combined = ad.concat(level_samples[level],
+                        axis=1,  # Concatenate along var (columns/samples) axis
+                        join='outer',
+                        merge='first'  # Keep first value for non-aligned obs metadata
+                    )
 
-            new_adata = level_samples[level][0]
+                # If level already exists in collection, concatenate with existing data
+                if level in self.data:
+                    self._log(f"    Concatenating with existing {level} data...")
+                    existing = self.data[level]
+                    combined = ad.concat(
+                        [existing, combined],
+                        axis=1,  # Concatenate along var (columns/samples) axis
+                        join='outer',
+                        merge='first'  # Keep first value for non-aligned obs metadata
+                    )
+                    self.data[level] = combined
+                    self._log(f"    ✓ Combined shape: {self.data[level].shape}")
+                else:
+                    # First time adding this level
+                    self.data[level] = combined
+                    self._log(f"    ✓ Added {level} with shape: {self.data[level].shape}")
 
-            if level in self.data:
-                # Concatenate with existing data
-                print(f"    Concatenating with existing {level} data...")
-                existing = self.data[level]
-                combined = ad.concat(
-                    [existing, new_adata],
-                    axis=1,  # Concatenate along var (columns/samples) axis
-                    join='outer',
-                    merge='first'  # Keep first value for non-aligned obs metadata
-                )
-                self.data[level] = combined
-                print(f"    ✓ Combined shape: {self.data[level].shape}")
-            else:
-                # First sample for this level
-                self.data[level] = new_adata
-                print(f"    ✓ Shape: {self.data[level].shape}")
-
-        print(f"\n✓ Added sample '{sample_name}' to collection")
+        self._log(f"\n✓ Added sample '{sample_name}' to collection")
 
     def get(self, level: str, sample: Optional[str] = None) -> ad.AnnData:
         """
@@ -608,7 +670,7 @@ class DiannCollection:
             # Save as pickle
             with open(filepath_obj, 'wb') as f:
                 pickle.dump(self.data, f)
-            print(f"Saved collection to {filepath_obj}")
+            self._log(f"Saved collection to {filepath_obj}")
 
         elif filepath_obj.suffix == '.h5ad':
             # Save each level as separate h5ad file in a directory
@@ -616,7 +678,7 @@ class DiannCollection:
             for level, adata in self.data.items():
                 level_path = filepath_obj / f"{level}.h5ad"
                 adata.write_h5ad(level_path)
-            print(f"Saved collection to {filepath_obj} (directory with {len(self.data)} level files)")
+            self._log(f"Saved collection to {filepath_obj} (directory with {len(self.data)} level files)")
 
         else:
             raise ValueError(f"Unsupported file format: {filepath_obj.suffix}. Use .pkl or .h5ad")
@@ -645,7 +707,7 @@ class DiannCollection:
             # Load from pickle
             with open(filepath_obj, 'rb') as f:
                 collection.data = pickle.load(f)
-            print(f"Loaded collection from {filepath_obj}")
+            collection._log(f"Loaded collection from {filepath_obj}")
 
         elif filepath_obj.suffix == '.h5ad' or filepath_obj.is_dir():
             # Load from h5ad directory
@@ -655,7 +717,7 @@ class DiannCollection:
             for level_file in filepath_obj.glob("*.h5ad"):
                 level = level_file.stem
                 collection.data[level] = ad.read_h5ad(level_file)
-            print(f"Loaded collection from {filepath_obj} ({len(collection.data)} levels)")
+            collection._log(f"Loaded collection from {filepath_obj} ({len(collection.data)} levels)")
 
         else:
             raise ValueError(f"Unsupported file format: {filepath_obj.suffix}. Use .pkl or .h5ad")
@@ -697,10 +759,18 @@ class DiannCollection:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit - cleanup temp directories."""
+        """Context manager exit - cleanup temp directories and close log file."""
         for temp_dir in self.temp_dirs:
             try:
                 shutil.rmtree(temp_dir)
             except Exception:
                 pass
+
+        # Close log file if open
+        if self.log_handle:
+            self._log("\n" + "=" * 80)
+            self._log(f"Log closed - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            self.log_handle.close()
+            self.log_handle = None
+
         return False

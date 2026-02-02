@@ -212,15 +212,24 @@ class DiannLoader:
         result = df.loc[:, available_cols]
 
         # return grouped/agg table for protein level + check to make sure collapsed values are redundant
-        if level == 'protein':
+        if level in ['protein', 'gene']:
             level_config = self.config['levels'][level]
             obs = level_config['obs']
             var = level_config['var']
 
             # check if any var+obs columns have all NaN values -> if so, exclude from grouping
             valid_groupby_cols = result[var+obs].dropna(axis=1, how='all').columns.to_list()
-
-            pr_obs = level_config['pr_obs']
+            
+            # TODO: add pr_obs in the yaml
+            # TODO: make more formalized way to handle missing genes
+            if level == 'protein':
+                pr_obs = level_config['pr_obs']
+            
+            else:
+                protein_config = self.config['levels']['protein']
+                nan_genes = df[obs[0]].isna()
+                protein_gene_sub = df[protein_config.get('obs', [])[0]][nan_genes] + '_P'
+                df.loc[nan_genes, obs[0]] = protein_gene_sub
 
             # Ensure pr_obs columns are not in groupby (they should be aggregated, not grouped by)
             valid_groupby_cols = [col for col in valid_groupby_cols if col not in pr_obs]
@@ -299,46 +308,59 @@ class DiannLoader:
         # Create AnnData object
         level_config = self.config['levels'][level]
 
+        #TODO:
+
+        # self.config['levels'][level] = df
+        # return
+
         # Smart selection of obs_name: use first obs column that exists and has unique values
         obs_name = None
         obs_candidates = level_config.get('obs', [])
-        if not isinstance(obs_candidates, list):
+
+        # Ensure obs_candidates is always a list of strings
+        # Handle both single string values and list values from YAML
+        if isinstance(obs_candidates, str):
+            # Single string value - wrap in list
+            obs_candidates = [obs_candidates]
+        elif not isinstance(obs_candidates, list):
+            # Some other type - convert to list
             obs_candidates = [obs_candidates]
 
         # First try to find a unique column
         for candidate in obs_candidates:
             if candidate in df.columns:
                 # Check if values are unique
-                if df[candidate].nunique() == len(df):
+
+                if not df[candidate].isna().any():
                     obs_name = candidate
-                    print(f"Using '{obs_name}' as obs_name (unique values)")
+                    print(f"Using '{obs_name}' as obs_name")
                     break
 
-        # If no unique column found, use first available (will make unique later)
-        if obs_name is None:
-            for candidate in obs_candidates:
-                if candidate in df.columns:
-                    obs_name = candidate
-                    print(f"Using '{obs_name}' as obs_name (non-unique, will be made unique)")
-                    break
-
-        if obs_name is None:
-            raise KeyError(
-                f"Cannot create AnnData for level '{level}': "
-                f"no valid obs column found. Tried: {obs_candidates}"
-            )
+                else:
+                    print(f"{candidate} is contains NaN")
 
         # Smart selection of var_name: use first var column that exists
         var_name = None
         var_candidates = level_config.get('var', [])
-        if not isinstance(var_candidates, list):
+
+        # Ensure var_candidates is always a list of strings
+        # Handle both single string values and list values from YAML
+        if isinstance(var_candidates, str):
+            # Single string value - wrap in list
+            var_candidates = [var_candidates]
+        elif not isinstance(var_candidates, list):
+            # Some other type - convert to list
             var_candidates = [var_candidates]
 
         for candidate in var_candidates:
             if candidate in df.columns:
-                var_name = candidate
-                print(f"Using '{var_name}' as var_name")
-                break
+                # Warn if var_name is not unique within sample
+                if not df[candidate].isna().any():
+                    var_name = candidate
+                    print(f"Using '{var_name}' as var_name")
+                    break
+                else:
+                    print(f"{candidate} is fully NaN")
 
         if var_name is None:
             raise KeyError(
@@ -348,40 +370,45 @@ class DiannLoader:
 
         # Smart selection of x: try each layer column until one works
         x_candidates = level_config.get('layers', [])
-        if not isinstance(x_candidates, list):
+
+        # Ensure x_candidates is always a list of strings
+        if isinstance(x_candidates, str):
+            x_candidates = [x_candidates]
+        elif not isinstance(x_candidates, list):
             x_candidates = [x_candidates]
 
         # Get obs columns for pivot index (all columns in obs section)
         obs_cols = level_config.get('obs', [obs_name])
-        if not isinstance(obs_cols, list):
+
+        # Ensure obs_cols is always a list of strings
+        if isinstance(obs_cols, str):
+            obs_cols = [obs_cols]
+        elif not isinstance(obs_cols, list):
             obs_cols = [obs_cols]
 
-        # Ensure selected obs_name is in obs_cols
-        if obs_name not in obs_cols:
-            obs_cols = [obs_name] + obs_cols
-
-        # Filter to only obs columns that actually exist in df
+        # # Filter to only obs columns that actually exist in df
         available_obs_cols = [col for col in obs_cols if col in df.columns]
 
-        # Check if obs_name has duplicate values - if so, need to aggregate
-        needs_aggregation = df[obs_name].duplicated().any()
+        # # Check if obs_name has duplicate values - if so, need to aggregate
+        # needs_aggregation = df[obs_name].duplicated().any()
 
-        # If we need aggregation, aggregate ALL columns (not just those in config)
-        if needs_aggregation:
-            print(f"  Aggregating duplicate '{obs_name}' values using max()")
-            # Group by obs columns and var to get one value per (obs, var) combination
-            groupby_cols = available_obs_cols + [var_name]
+        # # If we need aggregation, aggregate ALL columns (not just those in config)
+        # if needs_aggregation:
+        #     print(f"  Aggregating duplicate '{obs_name}' values using max()")
+        #     # Group by obs columns and var to get one value per (obs, var) combination
+        #     groupby_cols = available_obs_cols + [var_name]
 
-            # Find all numeric columns that should be aggregated (everything except groupby cols)
-            numeric_cols = df.select_dtypes(include=['number']).columns
-            cols_to_aggregate = [col for col in numeric_cols if col not in groupby_cols]
+        #     # Find all numeric columns that should be aggregated (everything except groupby cols)
+        #     numeric_cols = df.select_dtypes(include=['number']).columns
+        #     cols_to_aggregate = [col for col in numeric_cols if col not in groupby_cols]
 
-            # Aggregate using max for all numeric columns
-            agg_dict = {col: 'max' for col in cols_to_aggregate}
-            df_for_pivot = df.groupby(groupby_cols, as_index=False).agg(agg_dict)
-        else:
-            df_for_pivot = df
+        #     # Aggregate using max for all numeric columns
+        #     agg_dict = {col: 'max' for col in cols_to_aggregate}
+        #     df_for_pivot = df.groupby(groupby_cols, as_index=False).agg(agg_dict)
+        # else:
+        #     df_for_pivot = df
 
+        df_for_pivot = df
         # Try each quantification column until one works
         pivot_df = None
         x_col = None
@@ -392,7 +419,7 @@ class DiannLoader:
                 continue
 
             # Check if not all empty/null
-            if df_for_pivot[candidate].isna().all() or not (df_for_pivot[candidate] != 0).any():
+            if df_for_pivot[candidate].isna().all():
                 continue
 
             try:

@@ -406,6 +406,78 @@ class MSMethodCollection:
 
         return pd.DataFrame(comparison_data)
 
+    def to_dataframe(self, method_names: Optional[List[str]] = None,
+                    param_names: Optional[List[str]] = None,
+                    exclude_dia_windows: bool = True) -> pd.DataFrame:
+        """
+        Convert methods to DataFrame with parameters as rows and methods as columns.
+
+        Parameters:
+        -----------
+        method_names : List[str], optional
+            Methods to include as columns. If None, include all methods.
+        param_names : List[str], optional
+            Parameters to include as rows. If None, include all parameters.
+        exclude_dia_windows : bool
+            Whether to exclude dia_windows (DataFrame objects) from output (default: True).
+            Set to False to include, but note that dia_windows values won't display well.
+
+        Returns:
+        --------
+        pd.DataFrame
+            DataFrame with parameters as index (rows) and methods as columns.
+            Each cell contains the parameter value for that method.
+
+        Example:
+        --------
+        # Get all methods and parameters
+        df = collection.to_dataframe()
+
+        # Get specific methods
+        df = collection.to_dataframe(method_names=['DIA007.proteoscape', 'DIA016.proteoscape'])
+
+        # Get specific parameters across all methods
+        df = collection.to_dataframe(param_names=['Collision_GasSupply_Set', 'dia_window_count'])
+
+        # Filter afterwards
+        df = collection.to_dataframe()
+        subset = df.loc[['Collision_GasSupply_Set', 'TOF_DetectorTofSetValue']]
+        """
+        if method_names is None:
+            method_names = self.list_methods()
+
+        # Get first method to determine all available parameters
+        if not method_names:
+            return pd.DataFrame()
+
+        first_method = self.methods[method_names[0]].to_flat_dict(polarity='positive')
+
+        # Determine which parameters to include
+        if param_names is None:
+            all_params = list(first_method.keys())
+            # Optionally exclude dia_windows
+            if exclude_dia_windows:
+                param_names = [p for p in all_params if p != 'dia_windows']
+            else:
+                param_names = all_params
+
+        # Build DataFrame
+        data = {}
+        for method_name in method_names:
+            if method_name in self.methods:
+                method_dict = self.methods[method_name].to_flat_dict(polarity='positive')
+
+                # Extract requested parameters
+                data[method_name] = {
+                    param: method_dict.get(param)
+                    for param in param_names
+                }
+
+        # Create DataFrame with parameters as rows, methods as columns
+        df = pd.DataFrame(data).T  # Transpose so methods are columns
+
+        return df
+
     def plot_windows(self, method_names: Optional[List[str]] = None,
                     color_by_method: bool = True,
                     alpha: float = 0.6,
@@ -467,6 +539,23 @@ class MSMethodCollection:
         # Create legend handles
         legend_handles = []
 
+        # Collect scan ranges from all methods
+        scan_ranges = {}
+        for i, name in enumerate(methods_with_dia):
+            method = self.methods[name]
+            # Get Mode_ScanBegin and Mode_ScanEnd parameters
+            scan_begin = method.get_param('Mode_ScanBegin')
+            scan_end = method.get_param('Mode_ScanEnd')
+            if scan_begin is not None and scan_end is not None:
+                scan_ranges[name] = (scan_begin, scan_end, i)
+
+        # Find overall min/max for x-axis limits
+        if scan_ranges:
+            all_begins = [r[0] for r in scan_ranges.values()]
+            all_ends = [r[1] for r in scan_ranges.values()]
+            overall_min = min(all_begins)
+            overall_max = max(all_ends)
+
         # Plot each method
         for i, name in enumerate(methods_with_dia):
             method = self.methods[name]
@@ -482,6 +571,13 @@ class MSMethodCollection:
                     edge_color=edge_color,
                     method_name=name
                 )
+
+                # Draw vertical lines for scan range with same color and alpha
+                if name in scan_ranges:
+                    scan_begin, scan_end, _ = scan_ranges[name]
+                    ax.axvline(scan_begin, color=colors[i], alpha=alpha, linestyle='--', linewidth=1.5)
+                    ax.axvline(scan_end, color=colors[i], alpha=alpha, linestyle='--', linewidth=1.5)
+
                 # Create legend handle for this method
                 legend_handles.append(Patch(facecolor=colors[i], edgecolor=edge_color,
                                            alpha=alpha, label=name))
@@ -499,8 +595,19 @@ class MSMethodCollection:
                 legend_handles.append(Patch(facecolor='gray', edgecolor=edge_color,
                                            alpha=alpha, label=name))
 
+        # Set x-axis limits based on widest scan range
+        if scan_ranges:
+            ax.set_xlim(overall_min - 50, overall_max + 50)  # Add padding
+
+        # Set axis labels
+        ax.set_xlabel('m/z')
+        ax.set_ylabel('1/K0 (Ion Mobility)')
+
         ax.set_title(f'DIA Windows Overlay: {", ".join(methods_with_dia)}')
-        ax.legend(handles=legend_handles, loc='best')
+
+        # Add legend for methods if multiple methods are being compared
+        if len(methods_with_dia) > 1:
+            ax.legend(handles=legend_handles, loc='best', frameon=True, framealpha=0.9)
 
         # Only call tight_layout if we created the figure
         if created_fig:
@@ -541,9 +648,15 @@ class MSMethodCollection:
             print("Warning: Need at least 2 methods to compare")
             return None
 
-        # Get differences
-        result = self.find_differences(method_names=method_names, tolerance=tolerance)
-        param_df = result['param_differences_df']
+        # Get differences (now returns single DataFrame)
+        diff_df = self.find_differences(method_names=method_names, tolerance=tolerance)
+
+        if diff_df.empty or 'Message' in diff_df.columns:
+            print("No parameter differences found")
+            return None
+
+        # Filter to numeric parameter types (exclude dia_windows DataFrames)
+        param_df = diff_df[diff_df['Type'].isin(['instrument_param', 'polarity_param'])].copy()
 
         if param_df.empty:
             print("No parameter differences found")
@@ -552,7 +665,7 @@ class MSMethodCollection:
         # Select parameters to plot
         if param_names is not None:
             # Filter to requested parameters
-            param_df = param_df.loc[param_df.index.intersection(param_names)]
+            param_df = param_df[param_df['Parameter'].isin(param_names)]
         else:
             # Plot top 20 parameters with numeric differences
             param_df = param_df.head(20)
@@ -566,7 +679,8 @@ class MSMethodCollection:
 
         # Prepare data for plotting
         params_to_plot = []
-        for param_name, row in param_df.iterrows():
+        for _, row in param_df.iterrows():
+            param_name = row['Parameter']
             # Check if values are numeric
             try:
                 values = []
@@ -650,9 +764,9 @@ class MSMethodCollection:
                         include_dia: bool = True,
                         polarities: Optional[List[str]] = None,
                         sources: Optional[List[str]] = None,
-                        tolerance: float = 1e-6) -> Dict[str, Any]:
+                        tolerance: float = 1e-6) -> pd.DataFrame:
         """
-        Automatically identify differences between methods.
+        Find differences between methods and return as single unified DataFrame.
 
         Parameters:
         -----------
@@ -666,112 +780,239 @@ class MSMethodCollection:
             Whether to check DIA settings (default: True)
         polarities : List[str], optional
             Specific polarities to compare ('positive', 'negative').
-            If None, compare all available polarities.
         sources : List[str], optional
             Specific ion sources to compare ('esi', 'captivespray', 'apci', etc.).
-            If None, compare all available sources.
         tolerance : float
             Tolerance for floating point comparisons (default: 1e-6)
 
         Returns:
         --------
-        Dict[str, Any]
-            Dictionary containing:
-            - 'identical': bool - whether all methods are identical
-            - 'param_differences_df': pd.DataFrame - global parameters that differ (wide format)
-            - 'polarity_differences_df': pd.DataFrame - polarity-specific parameters that differ (wide format)
-            - 'dia_differences_df': pd.DataFrame - DIA settings that differ (wide format)
-            - 'summary': str - human-readable summary
+        pd.DataFrame
+            DataFrame with all differences. Columns:
+            - 'Parameter': parameter name
+            - 'Type': 'instrument_param', 'polarity_param', 'dia_stat', or 'dia_windows'
+            - One column per method with the values
+            - 'Description': optional description
 
         Example:
         --------
         # Compare all settings
-        diffs = collection.find_differences()
+        diff_df = collection.find_differences(['method1', 'method2'])
 
-        # Compare only DIA settings
-        diffs = collection.find_differences(include_params=False, include_polarity_configs=False)
-
-        # Compare only positive polarity captivespray parameters
-        diffs = collection.find_differences(
-            include_params=False,
-            include_dia=False,
-            polarities=['positive'],
-            sources=['captivespray']
-        )
+        # Filter by type
+        instrument_diffs = diff_df[diff_df['Type'] == 'instrument_param']
+        dia_diffs = diff_df[diff_df['Type'].str.startswith('dia_')]
         """
         if method_names is None:
             method_names = self.list_methods()
 
         if len(method_names) < 2:
-            return {
-                'identical': True,
-                'param_differences_df': pd.DataFrame(),
-                'polarity_differences_df': pd.DataFrame(),
-                'dia_differences_df': pd.DataFrame(),
-                'summary': 'Need at least 2 methods to compare'
-            }
+            return pd.DataFrame({'Message': ['Need at least 2 methods to compare']})
 
-        result = {
-            'identical': True,
-            'param_differences_df': pd.DataFrame(),
-            'polarity_differences_df': pd.DataFrame(),
-            'dia_differences_df': pd.DataFrame(),
-            'summary': ''
-        }
+        rows = []
 
         # Compare global MS instrument parameters
         if include_params:
             param_diffs = self._find_param_differences(method_names, tolerance,
                                                       check_polarity_configs=False)
-            if param_diffs:
-                result['identical'] = False
-                result['param_differences_df'] = self._differences_to_df(
-                    param_diffs, method_names
-                )
+            for param_name, values_list in param_diffs.items():
+                row = {
+                    'Parameter': param_name,
+                    'Type': 'instrument_param',
+                    'Description': ''
+                }
+                for method_name, value in values_list:
+                    row[method_name] = value
+                rows.append(row)
 
-        # Compare polarity-specific parameters
+        # Compare polarity-specific parameters (positive only)
         if include_polarity_configs:
             polarity_diffs = self._find_polarity_differences(method_names, tolerance,
                                                              polarities, sources)
-            if polarity_diffs:
-                result['identical'] = False
-                result['polarity_differences_df'] = self._differences_to_df(
-                    polarity_diffs, method_names
-                )
+            for param_key, values_list in polarity_diffs.items():
+                # Parse key: polarity_source_param
+                parts = param_key.split('_', 2)
+                if len(parts) >= 3:
+                    polarity, source, param_name = parts[0], parts[1], parts[2]
+                else:
+                    polarity, source, param_name = 'unknown', 'unknown', param_key
 
-        # Compare DIA settings
+                row = {
+                    'Parameter': f"{source}_{param_name}",
+                    'Type': 'polarity_param',
+                    'Description': f'{polarity} polarity'
+                }
+                for method_name, value in values_list:
+                    row[method_name] = value
+                rows.append(row)
+
+        # Compare DIA settings comprehensively
         if include_dia:
-            dia_diffs = self._find_dia_differences(method_names, tolerance)
-            if dia_diffs:
-                result['identical'] = False
-                result['dia_differences_df'] = self._dia_differences_to_df(
-                    dia_diffs, method_names
-                )
+            dia_rows = self._compare_dia_comprehensive(method_names, tolerance)
+            rows.extend(dia_rows)
 
-        # Generate summary
-        result['summary'] = self._generate_difference_summary(result, method_names)
+        if not rows:
+            return pd.DataFrame({'Message': ['Methods are identical']})
 
-        return result
+        # Create DataFrame
+        df = pd.DataFrame(rows)
+
+        # Reorder columns: Parameter, Type, Description, then all methods
+        cols = ['Parameter', 'Type', 'Description'] + [m for m in method_names if m in df.columns]
+        df = df[[c for c in cols if c in df.columns]]
+
+        return df
+
+    def _compare_dia_comprehensive(self, method_names: List[str], tolerance: float) -> List[Dict]:
+        """
+        Comprehensive DIA comparison including stats and window placement.
+
+        Returns list of row dicts for DataFrame construction.
+        """
+        rows = []
+
+        # Check if all methods have DIA
+        has_dia = {}
+        for name in method_names:
+            if name in self.methods:
+                method_dict = self.methods[name].to_flat_dict(polarity='positive')
+                has_dia[name] = method_dict.get('has_dia', False)
+
+        if not all(has_dia.values()):
+            row = {
+                'Parameter': 'has_dia',
+                'Type': 'dia_stat',
+                'Description': 'Method has DIA configured'
+            }
+            for name in method_names:
+                row[name] = has_dia.get(name, False)
+            rows.append(row)
+            return rows  # Stop comparison if not all have DIA
+
+        # Compare DIA statistics from flat dicts
+        dia_stats = [
+            ('dia_window_count', 'Number of DIA windows'),
+            ('dia_cycle_count', 'Number of PASEF cycles'),
+            ('dia_mz_min', 'm/z minimum'),
+            ('dia_mz_max', 'm/z maximum'),
+            ('dia_im_min', '1/K0 minimum'),
+            ('dia_im_max', '1/K0 maximum'),
+        ]
+
+        for stat_key, description in dia_stats:
+            values = {}
+            for name in method_names:
+                if name in self.methods:
+                    method_dict = self.methods[name].to_flat_dict(polarity='positive')
+                    values[name] = method_dict.get(stat_key)
+
+            # Check if values differ
+            unique_vals = set(v for v in values.values() if v is not None)
+            if len(unique_vals) > 1:
+                row = {
+                    'Parameter': stat_key,
+                    'Type': 'dia_stat',
+                    'Description': description
+                }
+                row.update(values)
+                rows.append(row)
+
+        # Compare window placement (if windows exist and counts are the same)
+        window_counts = {}
+        for name in method_names:
+            if name in self.methods:
+                method_dict = self.methods[name].to_flat_dict(polarity='positive')
+                window_counts[name] = method_dict.get('dia_window_count', 0)
+
+        # If all have same number of windows, compare window-by-window
+        if len(set(window_counts.values())) == 1 and list(window_counts.values())[0] > 0:
+            windows_differ = False
+
+            # Get windows from each method
+            all_windows = {}
+            for name in method_names:
+                if name in self.methods:
+                    method_dict = self.methods[name].to_flat_dict(polarity='positive')
+                    all_windows[name] = method_dict.get('dia_windows')
+
+            # Compare window-by-window
+            num_windows = list(window_counts.values())[0]
+            ref_name = method_names[0]
+            ref_windows = all_windows[ref_name]
+
+            for idx in range(num_windows):
+                for col in ['MzStart', 'MzEnd', 'OneOverK0Start', 'OneOverK0End', 'CycleId']:
+                    if col not in ref_windows.columns:
+                        continue
+
+                    ref_val = ref_windows.iloc[idx][col]
+                    values = {ref_name: ref_val}
+
+                    for name in method_names[1:]:
+                        if name in all_windows and all_windows[name] is not None:
+                            other_windows = all_windows[name]
+                            if idx < len(other_windows):
+                                values[name] = other_windows.iloc[idx][col]
+
+                    # Check if different (accounting for NaN)
+                    unique_vals = []
+                    for v in values.values():
+                        if pd.isna(v):
+                            continue
+                        if isinstance(v, (int, float)):
+                            comparable = round(v / tolerance) * tolerance
+                        else:
+                            comparable = v
+                        if comparable not in unique_vals:
+                            unique_vals.append(comparable)
+
+                    if len(unique_vals) > 1:
+                        windows_differ = True
+                        row = {
+                            'Parameter': f'window_{idx}_{col}',
+                            'Type': 'dia_window_param',
+                            'Description': f'Window {idx} {col}'
+                        }
+                        row.update(values)
+                        rows.append(row)
+
+            # If windows differ, add a summary row with actual windows DataFrames
+            if windows_differ:
+                row = {
+                    'Parameter': 'dia_windows',
+                    'Type': 'dia_windows',
+                    'Description': 'Complete DIA window specifications (DataFrame objects)'
+                }
+                for name in method_names:
+                    row[name] = all_windows.get(name, None)
+                rows.append(row)
+
+        return rows
 
     def _find_param_differences(self, method_names: List[str],
                                tolerance: float,
                                check_polarity_configs: bool = False) -> Dict[str, List[Tuple[str, Any]]]:
-        """Find differences in global MS instrument parameters."""
+        """Find differences in global MS instrument parameters (uses unified params structure)."""
         differences = {}
 
-        # Get all unique parameter names across all methods
+        # Get all unique parameter names across all methods (global params only)
         all_param_names = set()
         for name in method_names:
             if name in self.methods:
-                all_param_names.update(self.methods[name].ms.instrument_params.keys())
+                # Only include non-dict values (global parameters)
+                for param_name, value in self.methods[name].ms.params.items():
+                    if not isinstance(value, dict):
+                        all_param_names.add(param_name)
 
         # Check each parameter
         for param_name in all_param_names:
             values = {}
             for method_name in method_names:
                 if method_name in self.methods:
-                    value = self.methods[method_name].ms.instrument_params.get(param_name)
-                    values[method_name] = value
+                    value = self.methods[method_name].ms.params.get(param_name)
+                    # Only include if it's not a dict (global param)
+                    if not isinstance(value, dict):
+                        values[method_name] = value
 
             # Check if all values are the same
             unique_values = []
@@ -799,25 +1040,31 @@ class MSMethodCollection:
                                    tolerance: float,
                                    polarities: Optional[List[str]] = None,
                                    sources: Optional[List[str]] = None) -> Dict[str, List[Tuple[str, Any]]]:
-        """Find differences in polarity-specific parameters."""
+        """Find differences in polarity-specific parameters (uses unified params structure)."""
         differences = {}
 
-        # Collect all unique polarity/source/parameter combinations
+        # Collect all unique polarity/source/parameter combinations from unified params
         all_configs = set()
         for method_name in method_names:
             if method_name in self.methods:
-                for polarity, source_dict in self.methods[method_name].ms.polarity_configs.items():
-                    # Filter by specified polarities
-                    if polarities is not None and polarity not in polarities:
-                        continue
+                # Iterate through params and find dict values (polarity-specific)
+                for key, value in self.methods[method_name].ms.params.items():
+                    if isinstance(value, dict):
+                        # Key format: {source}_{param_name}
+                        if '_' in key:
+                            source, param_name = key.split('_', 1)
 
-                    for source, params in source_dict.items():
-                        # Filter by specified sources
-                        if sources is not None and source not in sources:
-                            continue
+                            # Filter by specified sources
+                            if sources is not None and source not in sources:
+                                continue
 
-                        for param_name in params.keys():
-                            all_configs.add((polarity, source, param_name))
+                            # Check which polarities are present
+                            for polarity in value.keys():
+                                # Filter by specified polarities
+                                if polarities is not None and polarity not in polarities:
+                                    continue
+
+                                all_configs.add((polarity, source, param_name))
 
         # Check each configuration
         for polarity, source, param_name in all_configs:
@@ -1254,9 +1501,23 @@ class MSMethodCollection:
         """String representation of collection."""
         return f"MSMethodCollection(n_methods={len(self.methods)})"
 
-    def __getitem__(self, name: str) -> BrukerMethod:
-        """Allow dictionary-style access to methods."""
-        return self.methods[name]
+    def __getitem__(self, name: str) -> Dict[str, Any]:
+        """
+        Allow dictionary-style access to methods.
+
+        Returns a flat dictionary with all parameters at top level.
+        Only positive polarity values are included for polarity-specific parameters.
+
+        Example:
+        --------
+        method = collection['DIA011.proteoscape']
+        gas_supply = method['Collision_GasSupply_Set']
+        windows = method['dia_windows']
+        """
+        if name not in self.methods:
+            raise KeyError(f"Method '{name}' not found in collection")
+
+        return self.methods[name].to_flat_dict(polarity='positive')
 
 
 # Usage example

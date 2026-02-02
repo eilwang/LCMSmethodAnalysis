@@ -129,9 +129,9 @@ class BrukerMethod:
         """Get TOF (Time of Flight) parameters."""
         return self.ms.get_tof_params(polarity)
 
-    def get_ims_imex_ramp_time(self, polarity: str = 'positive') -> Optional[Any]:
+    def get_ramp_time(self, polarity: str = 'positive') -> Optional[Any]:
         """Get IMS_imeX_RampTime parameter."""
-        return self.ms.get_ims_imex_ramp_time(polarity)
+        return self.ms.get_ramp_time(polarity)
 
     # ========================================================================
     # Convenience methods for DIA settings
@@ -277,6 +277,70 @@ class BrukerMethod:
 
         return result
 
+    def to_flat_dict(self, polarity: str = 'positive') -> Dict[str, Any]:
+        """
+        Export method data as a flat dictionary with only specified polarity.
+
+        All parameters are at the top level. For polarity-specific parameters,
+        only the specified polarity values are included.
+
+        Parameters:
+        -----------
+        polarity : str
+            Polarity to extract ('positive' or 'negative'), default: 'positive'
+
+        Returns:
+        --------
+        Dict[str, Any]
+            Flat dictionary with all parameters at top level
+        """
+        flat = {}
+
+        # Add file info with prefix
+        for key, value in self.ms.fileinfo.items():
+            flat[f'fileinfo_{key}'] = value
+
+        # Add general info with prefix
+        for key, value in self.ms.generalinfo.items():
+            flat[f'generalinfo_{key}'] = value
+
+        # Add all MS parameters
+        for param_name, value in self.ms.params.items():
+            if isinstance(value, dict):
+                # Polarity-specific parameter - extract only specified polarity
+                if polarity in value:
+                    flat[param_name] = value[polarity]
+            else:
+                # Global parameter
+                flat[param_name] = value
+
+        # Add DIA information if available
+        if self.dia is not None:
+            flat['has_dia'] = True
+            flat['dia_windows'] = self.dia.windows
+            flat['dia_global_info'] = self.dia.global_info
+
+            # Add DIA summary stats
+            dia_windows = self.get_dia_windows()
+            if dia_windows is not None and len(dia_windows) > 0:
+                flat['dia_window_count'] = len(dia_windows)
+                flat['dia_mz_min'] = dia_windows['MzStart'].min()
+                flat['dia_mz_max'] = dia_windows['MzEnd'].max()
+                flat['dia_im_min'] = dia_windows['OneOverK0Start'].min()
+                flat['dia_im_max'] = dia_windows['OneOverK0End'].max()
+
+                # Get cycle info
+                dia_cycle_ids = self.get_dia_cycle_ids()
+                if dia_cycle_ids:
+                    flat['dia_cycle_count'] = len(dia_cycle_ids)
+        else:
+            flat['has_dia'] = False
+
+        # Add synchro info
+        flat['has_synchro'] = self.synchro is not None and not self.synchro.is_empty
+
+        return flat
+
     def summary(self) -> str:
         """Return comprehensive summary of method."""
         summary_lines = []
@@ -289,8 +353,9 @@ class BrukerMethod:
         summary_lines.append("\n" + "=" * 80)
         summary_lines.append("MS INSTRUMENT PARAMETERS")
         summary_lines.append("=" * 80)
-        summary_lines.append(f"Global parameters: {len(self.ms.instrument_params)}")
-        summary_lines.append(f"Polarities configured: {', '.join(self.ms.polarity_configs.keys())}")
+        global_count = sum(1 for v in self.ms.params.values() if not isinstance(v, dict))
+        polarity_count = sum(1 for v in self.ms.params.values() if isinstance(v, dict))
+        summary_lines.append(f"Total parameters: {len(self.ms.params)} (global={global_count}, polarity_specific={polarity_count})")
 
         # Show a few key parameters
         summary_lines.append("\nKey Global Parameters:")
@@ -300,8 +365,8 @@ class BrukerMethod:
             'TOF_DetectorTofSetValue'
         ]
         for param in key_params:
-            value = self.ms.instrument_params.get(param)
-            if value is not None:
+            value = self.ms.params.get(param)
+            if value is not None and not isinstance(value, dict):
                 summary_lines.append(f"  {param}: {value}")
 
         # Capillary voltage by source
@@ -379,7 +444,7 @@ class BrukerMethod:
         dia_status = f"DIA={len(self.dia.windows)} windows" if self.dia else "DIA=None"
         synchro_status = "Synchro=Active" if (self.synchro and not self.synchro.is_empty) else "Synchro=None"
         return (f"BrukerMethod({self.method_path.name}, "
-                f"MS_params={len(self.ms.instrument_params)}, "
+                f"MS_params={len(self.ms.params)}, "
                 f"{dia_status}, {synchro_status})")
 
 

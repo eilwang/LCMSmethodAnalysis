@@ -52,6 +52,9 @@ class MSMethod:
         self.instrument_params = self._parse_instrument_params()
         self.polarity_configs = self._parse_polarity_configs()
 
+        # Combine into unified params dictionary
+        self.params = self._combine_params()
+
     def _parse_fileinfo(self) -> Dict[str, str]:
         """Parse fileinfo metadata."""
         fileinfo_elem = self.root.find('fileinfo')
@@ -190,10 +193,48 @@ class MSMethod:
 
         return configs
 
+    def _combine_params(self) -> Dict[str, Any]:
+        """
+        Combine instrument_params and polarity_configs into a unified structure.
+
+        Returns a dictionary where:
+        - Global parameters are stored as key: value
+        - Polarity-specific parameters are stored as {source}_{param}: {'positive': val, 'negative': val}
+
+        Returns:
+        --------
+        Dict[str, Any]
+            Unified parameter dictionary
+        """
+        combined = {}
+
+        # Add global parameters
+        combined.update(self.instrument_params)
+
+        # Organize polarity-specific parameters
+        # First, collect all unique (source, param_name) combinations
+        param_map = {}  # {source}_{param_name}: {polarity: value}
+
+        for polarity, sources in self.polarity_configs.items():
+            for source, params in sources.items():
+                for param_name, value in params.items():
+                    # Create key as source_paramname
+                    key = f"{source}_{param_name}"
+
+                    if key not in param_map:
+                        param_map[key] = {}
+
+                    param_map[key][polarity] = value
+
+        # Add polarity-specific parameters to combined dict
+        combined.update(param_map)
+
+        return combined
+
     def get_param(self, param_name: str, polarity: Optional[str] = None,
                   source: str = 'default') -> Optional[Any]:
         """
-        Get a parameter value.
+        Get a parameter value from the unified params dictionary.
 
         Parameters:
         -----------
@@ -209,16 +250,25 @@ class MSMethod:
         Optional[Any]
             Parameter value or None if not found
         """
+        # If no polarity specified, look for global parameter first
         if polarity is None:
-            return self.instrument_params.get(param_name)
+            # Check if it's a global parameter (not a dict)
+            value = self.params.get(param_name)
+            if value is not None and not isinstance(value, dict):
+                return value
+            return None
 
-        if polarity in self.polarity_configs:
-            if source in self.polarity_configs[polarity]:
-                return self.polarity_configs[polarity][source].get(param_name)
+        # For polarity-specific parameters, construct key as source_paramname
+        key = f"{source}_{param_name}"
+        value = self.params.get(key)
+
+        # If found and it's a polarity dict, return the specific polarity value
+        if isinstance(value, dict) and polarity in value:
+            return value[polarity]
 
         return None
 
-    def get_ims_imex_ramp_time(self, polarity: str = 'positive') -> Optional[float]:
+    def get_ramp_time(self, polarity: str = 'positive') -> Optional[float]:
         """
         Get IMS_imeX_RampTime for a specific polarity.
 
@@ -357,8 +407,7 @@ class MSMethod:
         return {
             'fileinfo': self.fileinfo,
             'generalinfo': self.generalinfo,
-            'instrument_params': self.instrument_params,
-            'polarity_configs': self.polarity_configs
+            'params': self.params  # Unified parameter dictionary
         }
 
     def summary(self) -> str:
@@ -380,29 +429,40 @@ class MSMethod:
         summary_lines.append(f"  Author: {self.generalinfo.get('author', 'N/A')}")
         summary_lines.append(f"  Last Modified: {self.generalinfo.get('modified-by-timstof-on', 'N/A')}")
 
+        # Count parameter types in unified structure
+        global_params = sum(1 for v in self.params.values() if not isinstance(v, dict))
+        polarity_params = sum(1 for v in self.params.values() if isinstance(v, dict))
+
+        summary_lines.append(f"\nUnified Parameter Structure:")
+        summary_lines.append(f"  Global parameters: {global_params}")
+        summary_lines.append(f"  Polarity-specific parameters: {polarity_params}")
+        summary_lines.append(f"  Total parameters: {len(self.params)}")
+
+        # Key parameters (show both global and polarity-specific examples)
+        summary_lines.append("\nKey Parameters:")
+
         # Global parameters
-        summary_lines.append(f"\nGlobal Instrument Parameters: {len(self.instrument_params)}")
-
-        # Polarity configurations
-        summary_lines.append("\nPolarity Configurations:")
-        for polarity, sources in self.polarity_configs.items():
-            summary_lines.append(f"  {polarity.capitalize()}: {len(sources)} source(s)")
-            for source in list(sources.keys())[:3]:  # Show first 3 sources
-                param_count = len(sources[source])
-                summary_lines.append(f"    - {source}: {param_count} parameters")
-
-        # Key parameters
-        summary_lines.append("\nKey Global Parameters:")
-        key_params = [
+        global_key_params = [
             'Digitizer_SampleIntervall',
-            'Digitizer_NoiseSuppressionThreshold',
             'Collision_GasSupply_Set',
             'TOF_DetectorTofSetValue'
         ]
-        for param in key_params:
-            value = self.instrument_params.get(param)
-            if value is not None:
-                summary_lines.append(f"  {param}: {value}")
+        summary_lines.append("  Global:")
+        for param in global_key_params:
+            value = self.params.get(param)
+            if value is not None and not isinstance(value, dict):
+                summary_lines.append(f"    {param}: {value}")
+
+        # Example polarity-specific parameters
+        summary_lines.append("  Polarity-specific (first 3):")
+        count = 0
+        for key, value in self.params.items():
+            if isinstance(value, dict) and count < 3:
+                summary_lines.append(f"    {key}:")
+                for pol, val in value.items():
+                    val_str = str(val)[:50] + '...' if len(str(val)) > 50 else str(val)
+                    summary_lines.append(f"      {pol}: {val_str}")
+                count += 1
 
         return '\n'.join(summary_lines)
 
@@ -424,9 +484,10 @@ class MSMethod:
         self.cleanup()
 
     def __repr__(self):
-        polarities = list(self.polarity_configs.keys())
-        return (f"MSMethod(instrument_params={len(self.instrument_params)}, "
-                f"polarities={polarities})")
+        global_count = sum(1 for v in self.params.values() if not isinstance(v, dict))
+        polarity_count = sum(1 for v in self.params.values() if isinstance(v, dict))
+        return (f"MSMethod(params={len(self.params)}, "
+                f"global={global_count}, polarity_specific={polarity_count})")
 
 
 # Usage example

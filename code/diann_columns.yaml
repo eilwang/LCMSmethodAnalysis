@@ -6,16 +6,16 @@ levels:
       - File.Name # entire file path
       - Run # basename
     obs:
+      - Precursor.Id
+      - Modified.Sequence
+      - Stripped.Sequence
+      - Precursor.Charge
       - Protein.Group # parsimony protein group
       - Protein.Ids
       - Protein.Names
       - Genes
       - All Mapped Proteins
       - All Mapped Genes
-      - Modified.Sequence
-      - Stripped.Sequence
-      - Precursor.Id
-      - Precursor.Charge
       - Lib.Index
     layers:
       - Precursor.Quantity
@@ -29,7 +29,7 @@ levels:
       - iRT
       - Predicted.RT
       - Predicted.iRT
-      - Q.Value # within run FDR 
+      - Q.Value # within run FDR
       - PEP
       - Global.Q.Value # FDR across all runs reflects MBR; < 0.01 == 1% FDR
       - Translated.Q.Value
@@ -55,9 +55,19 @@ levels:
       - Fragment.Correlations
       - MS2.Scan
       - Fragment.Info
+      - Precursor.FWHM
+      - Precursor.Error.Ppm
+      - Corr.Precursor.Error.Ppm
+      - Data.Points
+      - Ms1.Iso.Corr.Sum
+      - Library.Precursor.Mz
+      - Corrected.Precursor.Mz
+      - Precursor.Calibrated.Mz
+      - Fragment.Calibrated.Mz
+      - Exp.1/K0
+      - Lib.1/K0
+      # - Label.Ratio
 
-# Label.Ratio	
-    
     # mod_obs:
     #   - {residue:mass_shift}
     #   - {residue:mass_shift} Best Localization
@@ -72,7 +82,7 @@ levels:
       - Protein.Group
       - Protein.Names
       - Genes
-      
+
     pr_obs:
       - Modified.Sequence
       - Stripped.Sequence
@@ -89,6 +99,7 @@ levels:
   gene:
     obs:
       - Genes
+      
     var:
       - File.Name # entire file path
       - Run # basename
@@ -100,62 +111,61 @@ levels:
       - GG.Q.Value
 
 
-# File.Name	
-# Run	
-# Protein.Group	
-# Protein.Ids	
-# Protein.Names	
-# Genes	
-# PG.Quantity	
-# PG.Normalised	
-# Genes.Quantity	
-# Genes.Normalised	
+# Additional columns reference (commented out)
+# File.Name
+# Run
+# Protein.Group
+# Protein.Ids
+# Protein.Names
+# Genes
+# PG.Quantity
+# PG.Normalised
+# Genes.Quantity
+# Genes.Normalised
 # Genes.MaxLFQ
-# Genes.MaxLFQ.Unique	
-# PG.MaxLFQ	
-# Modified.Sequence	
-# Stripped.Sequence	
-# Precursor.Id	
-# Precursor.Charge	
-# Q.Value	
-# Protein.Q.Value	
-# PG.Q.Value	
-# GG.Q.Value	
-# Proteotypic	
-# Precursor.Quantity	
+# Genes.MaxLFQ.Unique
+# PG.MaxLFQ
+# Modified.Sequence
+# Stripped.Sequence
+# Precursor.Id
+# Precursor.Charge
+# Q.Value
+# Protein.Q.Value
+# PG.Q.Value
+# GG.Q.Value
+# Proteotypic
+# Precursor.Quantity
 # Precursor.Normalised
-
-# Quantity.Quality	
-# RT	
-# RT.Start	
-# RT.Stop	
-# iRT	
-# Predicted.RT	
-# Predicted.iRT	
-# First.Protein.Description	
-# Lib.Q.Value	
-# Ms1.Profile.Corr	
-# Ms1.Corr.Sum	
-# Ms1.Area	
-# Evidence	
-# CScore	
-# Decoy.Evidence	
-# Decoy.CScore	
-# Fragment.Quant.Raw	
-# Fragment.Quant.Corrected	
-# Fragment.Correlations	
-# MS2.Scan	
-# Precursor.FWHM	
-# Precursor.Error.Ppm	
-# Corr.Precursor.Error.Ppm	
-# Data.Points	
-# Ms1.Iso.Corr.Sum	
-# Library.Precursor.Mz	
-# Corrected.Precursor.Mz	
-# Fragment.Info	
-# Precursor.Calibrated.Mz	
-# Fragment.Calibrated.Mz	
-# Exp.1/K0	
+# Quantity.Quality
+# RT
+# RT.Start
+# RT.Stop
+# iRT
+# Predicted.RT
+# Predicted.iRT
+# First.Protein.Description
+# Lib.Q.Value
+# Ms1.Profile.Corr
+# Ms1.Corr.Sum
+# Ms1.Area
+# Evidence
+# CScore
+# Decoy.Evidence
+# Decoy.CScore
+# Fragment.Quant.Raw
+# Fragment.Quant.Corrected
+# Fragment.Correlations
+# MS2.Scan
+# Precursor.FWHM
+# Precursor.Error.Ppm
+# Corr.Precursor.Error.Ppm
+# Data.Points
+# Ms1.Iso.Corr.Sum
+# Library.Precursor.Mz
+# Corrected.Precursor.Mz
+# Fragment.Info
+# Precursor.Calibrated.Mz
+# Fragment.Calibrated.Mz
+# Exp.1/K0
 # Lib.1/K0
-
-# Label.Ratio	
+# Label.Ratio
