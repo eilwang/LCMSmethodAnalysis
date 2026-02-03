@@ -11,7 +11,7 @@ import pandas as pd
 
 from ms_method_parser import MSMethod
 from dia_settings_parser import DIASettings
-from synchro_settings_parser import SynchroSettings
+from archive.synchro_settings_parser import SynchroSettings
 from method_path_resolver import MethodPathResolver
 
 
