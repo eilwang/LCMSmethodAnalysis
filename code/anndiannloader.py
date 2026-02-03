@@ -1,5 +1,3 @@
-from ctypes.util import test
-import sys
 import pandas as pd
 import yaml
 from typing import List, Optional, Dict
@@ -206,7 +204,8 @@ class DiannLoader:
         missing_cols = set(expected_cols) - set(df.columns)
 
         if missing_cols:
-            msg = f"Missing columns for level '{level}': {missing_cols}"
+            missing = '\n      * '.join(missing_cols)
+            msg = f"    Missing columns for level '{level}':\n{missing}"
             if strict:
                 raise ValueError(msg)
             else:
@@ -216,9 +215,6 @@ class DiannLoader:
         available_cols = [col for col in expected_cols if col in df.columns]
 
         logger.info(f"Loaded {len(df)} rows with {len(available_cols)}/{len(expected_cols)} columns for level '{level}'")
-
-        if missing_cols:
-            logger.info(f"Missing columns: {missing_cols}")
 
         result = df.loc[:, available_cols]
 
@@ -272,12 +268,7 @@ class DiannLoader:
             #keep multindex to use for pivot table later, removes need to respecify columns
             result = result.groupby(valid_groupby_cols).agg(**agg_dict).reset_index()
 
-        if search_type == 'fragpipe':
-            result['search_type'] = 'fragpipe'
-            result['Run'] = result['File.Name'].str.extract(r'.+\/(.+)\.d$', expand=False)
-        else:
-            result['search_type'] = 'bps'
-            # result = result.drop(columns=pr_obs)
+        result['search_type'] = search_type
 
         return result # type: ignore
     
@@ -326,155 +317,63 @@ class DiannLoader:
         # Create AnnData object
         level_config = self.config['levels'][level]
 
-        # Smart selection of obs_name: use first obs column that exists and has unique values
-        obs_name = None
-        obs_candidates = level_config.get('obs', [])
+        def get_valid_cols(df, level):
+            cols = level_config.get(level, [])
+            if isinstance(cols, str):
+                # Single string value - wrap in list
+                cols = [cols]
+            elif not isinstance(cols, list):
+                # Some other type - convert to list
+                cols = [cols]
+            
+            cols = [c for c in cols if c in df.columns]
+            
+            if level == 'layers':
+                cols_without_nan = ~df.loc[:, cols].isna().all()
+            else:
+                cols_without_nan = ~df.loc[:, cols].isna().any()
 
-        # Ensure obs_candidates is always a list of strings
-        # Handle both single string values and list values from YAML
-        if isinstance(obs_candidates, str):
-            # Single string value - wrap in list
-            obs_candidates = [obs_candidates]
-        elif not isinstance(obs_candidates, list):
-            # Some other type - convert to list
-            obs_candidates = [obs_candidates]
+            valid_cols = [col for col, is_valid in zip(cols, cols_without_nan) if is_valid]
 
-        # First try to find a unique column
-        for candidate in obs_candidates:
-            if candidate in df.columns:
-                # Check if values are unique
+            if len(valid_cols) == 0:
+                raise ValueError(f"No {level} columns found without NaN values. Tried: {cols}")
 
-                if not df[candidate].isna().any():
-                    obs_name = candidate
-                    logger.info(f"Using '{obs_name}' as obs_name")
-                    break
+            main_col = valid_cols[0]
 
-                else:
-                    logger.info(f"{candidate} is contains NaN")
+            return valid_cols, main_col
+    
+        var, var_name = get_valid_cols(df, 'var')
+        obs, obs_name = get_valid_cols(df, 'obs')
+        layers, x = get_valid_cols(df, 'layers')
 
-        # Smart selection of var_name: use first var column that exists
-        var_name = None
-        var_candidates = level_config.get('var', [])
-        var_candidates += ['search_type']
-
-        # Ensure var_candidates is always a list of strings
-        # Handle both single string values and list values from YAML
-        if isinstance(var_candidates, str):
-            # Single string value - wrap in list
-            var_candidates = [var_candidates]
-        elif not isinstance(var_candidates, list):
-            # Some other type - convert to list
-            var_candidates = [var_candidates]
-
-        for candidate in var_candidates:
-            if candidate in df.columns:
-                # Warn if var_name is not unique within sample
-                if not df[candidate].isna().any():
-                    var_name = candidate
-                    logger.info(f"Using '{var_name}' as var_name")
-                    break
-                else:
-                    logger.info(f"{candidate} is fully NaN")
-
-        if var_name is None:
-            raise KeyError(
-                f"Cannot create AnnData for level '{level}': "
-                f"no valid var column found. Tried: {var_candidates}"
-            )
-
-        # Smart selection of x: try each layer column until one works
-        x_candidates = level_config.get('layers', [])
-
-        # Ensure x_candidates is always a list of strings
-        if isinstance(x_candidates, str):
-            x_candidates = [x_candidates]
-        elif not isinstance(x_candidates, list):
-            x_candidates = [x_candidates]
-
-        # Get obs columns for pivot index (all columns in obs section)
-        obs_cols = level_config.get('obs', [obs_name])
-
-        # Ensure obs_cols is always a list of strings
-        if isinstance(obs_cols, str):
-            obs_cols = [obs_cols]
-        elif not isinstance(obs_cols, list):
-            obs_cols = [obs_cols]
-
-        # # Filter to only obs columns that actually exist in df
-        available_obs_cols = [col for col in obs_cols if col in df.columns]
+        var += ['search_type']
 
         df_for_pivot = df
         # Try each quantification column until one works
         pivot_df = None
-        x_col = None
-        last_error = None
 
-        for candidate in x_candidates:
-            if candidate not in df_for_pivot.columns:
-                continue
+        logger.info(f"Using '{x}' as X layer")
+        pivot_df = df_for_pivot.pivot(index=obs,
+                                      columns=var_name,
+                                      values=x)
 
-            # Check if not all empty/null
-            if df_for_pivot[candidate].isna().all():
-                continue
-
-            try:
-                logger.info(f"Using '{candidate}' as x (quantification column)")
-                pivot_df = df_for_pivot.pivot(index=available_obs_cols,
-                                              columns=var_name,
-                                              values=candidate)
-                x_col = candidate
-                break  # Success! Use this column
-            except (ValueError, KeyError) as e:
-                last_error = e
-                logger.warning(f"Failed to pivot with '{candidate}': {type(e).__name__}")
-                continue
-
-        if pivot_df is None or x_col is None:
-            error_msg = (
-                f"Cannot create AnnData for level '{level}': "
-                f"no valid quantification column found. Tried: {x_candidates[:5]}..."
-            )
-            if last_error:
-                error_msg += f"\nLast error: {last_error}"
-            raise KeyError(error_msg)
-
-        # Extract var dataframe from pivot columns
-        # If pivot has multiindex columns, get the var_name level
-        if isinstance(pivot_df.columns, pd.MultiIndex):
-            # Find which level has var_name
-            var_level_idx = None
-            for i, name in enumerate(pivot_df.columns.names):
-                if name == var_name:
-                    var_level_idx = i
-                    break
-            if var_level_idx is not None:
-                var_df = pivot_df.columns.get_level_values(var_level_idx).to_frame(index=False, name=var_name)
-            else:
-                # Use last level as fallback
-                var_df = pivot_df.columns.levels[-1].to_frame(name=var_name)
-        else:
-            # Single level columns
-            var_df = pivot_df.columns.to_frame(index=False, name=var_name)
+        var_df = pivot_df.columns.to_frame(index=False, name=var_name)
 
         adata = ad.AnnData(X = pivot_df.values,
                    obs = pivot_df.index.to_frame().reset_index(drop=True),
                    var = var_df.reset_index(drop=True))
-
-        # Check and set observation names
-        temp_obs_name = adata.obs[obs_name]
-
-        # Set obs_names first (explicitly convert to string to avoid anndata warning)
-        adata.obs_names = temp_obs_name.astype(str)
+        
+        adata.obs_names = adata.obs[obs_name].astype(str)
 
         # Then make unique if needed using anndata's built-in method
         if not adata.obs_names.is_unique:
-            msg = f"Non-unique observation names detected. {adata.n_obs} observations but only {temp_obs_name.nunique()} unique names."
+            msg = f"Non-unique observation names detected. {adata.n_obs} observations but only {adata.obs[obs_name].nunique()} unique names."
             if strict:
                 raise ValueError(msg)
             else:
                 warnings.warn(msg)
                 # Save original names
-                adata.obs[f'{obs_name}_original'] = temp_obs_name.values
+                adata.obs[f'{obs_name}_original'] = adata.obs[obs_name].values
                 # Use anndata's method to make unique
                 adata.obs_names_make_unique()
                 logger.info("Obs names made unique using anndata method.")
@@ -482,23 +381,20 @@ class DiannLoader:
         # Explicitly convert var_names to string to avoid anndata warning
         adata.var_names = adata.var[var_name].astype(str)
 
-        # not using layers in the config to account for additional processing that can added extra layers
-        # Only use columns that actually exist
-        var_cols_available = [c for c in level_config.get('var', []) if c in df_for_pivot.columns]
-        obs_cols_available = [c for c in level_config.get('obs', []) if c in df_for_pivot.columns]
-
-        layers = df_for_pivot.columns[~df_for_pivot.columns.isin(var_cols_available + obs_cols_available)]
+        layers = df_for_pivot.columns[~df_for_pivot.columns.isin(var + obs)]
 
         for l in layers:
-            pivot_df = df_for_pivot.pivot(index=available_obs_cols,
+            pivot_df = df_for_pivot.pivot(index=obs,
                                           columns=var_name,
                                           values=l)
             
+            #reindex to make sure everything is in the same order
             pivot_df.reindex(index=adata.obs_names,
                                                columns=adata.var_names,
                                                fill_value=np.nan)
 
             adata.layers[l] = pivot_df.values
+
         # TODO: make it possible to save to h5ad
         # if output_path:
         #     output_dir = os.path.dirname(output_path)

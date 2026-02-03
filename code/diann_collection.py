@@ -290,7 +290,7 @@ class DiannCollection:
 
         # Load each results file at each level
         for sample_name, results_path in results_files:
-            self._log(f"\nLoading {sample_name}...")
+            self._log(f"\nLoading {sample_name}")
 
             # Check which levels are available FIRST (more efficient - only reads header)
             available_levels = self.loader.check_available_levels(
@@ -302,42 +302,44 @@ class DiannCollection:
             for level in levels:
                 level_info = available_levels.get(level, {})
 
-                # Show warning about missing columns but still attempt to load
-                if not level_info.get('available', False):
-                    missing = level_info.get('missing_columns', [])
-                    self._log(f"  ⚠ Note: {level} level missing some columns: {', '.join(missing[:3])}{'...' if len(missing) > 3 else ''}")
+                # # Show warning about missing columns but still attempt to load
+                # if not level_info.get('available', False):
+                #     missing = level_info.get('missing_columns', [])
+                #     msg = "\n".join(missing)
+                #     # self._log(f"  ⚠ Note: {level} level missing some columns: {msg}")
 
                 try:
                     self._log(f"  Loading {level} level...")
 
-                    # Load with strict=False to be permissive
+                        # Load with strict=False to be permissive
                     adata = self.loader.load_to_adata(
-                        str(results_path),
-                        level=level,
-                        sections=sections,
-                        strict=False
-                    )
-
-                    # Add sample UUID/name to var (sample-level metadata, not obs)
+                            str(results_path),
+                            level=level,
+                            sections=sections,
+                            strict=False,
+                            search_type=search_type
+                        )
+                    # # Add sample UUID/name to var (sample-level metadata, not obs)
                     if search_type == 'bps':
                         adata.var['UUID'] = sample_name
 
-                    # Add search type to var
-                    adata.var['search_type'] = search_type
+                    # # Add search type to var
+                    # adata.var['search_type'] = search_type
 
-                    # Add to temporary list for concatenation
+                    # # Add to temporary list for concatenation
                     level_samples[level].append(adata)
 
-                    # Print AnnData summary
+                        # Print AnnData summary
                     self._log(f"    ✓ {level}: {adata.shape}")
                     self._log(f"\n{adata}\n")
 
                 except Exception as e:
                     # Handle errors during loading
                     if not strict:
-                        self._log(f"    ⚠ Could not load {level} level: {type(e).__name__}")
+                        self._log(f"⚠ Could not load {level} level: \n{e}")
                     else:
-                        warnings.warn(f"Error loading {sample_name} at {level} level: {e}")
+                        self._log(f"Error loading {sample_name} at {level} level: {e}")
+                        break
                     continue
 
         # return level_samples
@@ -472,10 +474,10 @@ class DiannCollection:
         for level in levels:
             level_info = available_levels.get(level, {})
 
-            # Show warning about missing columns but still attempt to load
-            if not level_info.get('available', False):
-                missing = level_info.get('missing_columns', [])
-                self._log(f"  ⚠ Note: {level} level missing some columns: {', '.join(missing[:3])}{'...' if len(missing) > 3 else ''}")
+            # # Show warning about missing columns but still attempt to load
+            # if not level_info.get('available', False):
+            #     missing = level_info.get('missing_columns', [])
+            #     self._log(f"  ⚠ Note: {level} level missing some columns: {', '.join(missing[:3])}{'...' if len(missing) > 3 else ''}")
 
             try:
                 self._log(f"  Loading {level} level...")
@@ -485,7 +487,8 @@ class DiannCollection:
                     str(results_file_path),
                     level=level,
                     sections=sections,
-                    strict=False
+                    strict=False,
+                    search_type=search_type
                 )
 
                 # Add sample UUID/name to var (sample-level metadata, not obs)
@@ -780,9 +783,8 @@ class DiannCollection:
 
     def __repr__(self) -> str:
         """String representation of collection."""
-        n_samples = len(self.list_samples())
         levels = list(self.data.keys())
-        return f"DiannCollection(samples={n_samples}, levels={levels})"
+        return f"DiannCollection(levels={levels})"
 
     def __enter__(self):
         """Context manager entry."""
