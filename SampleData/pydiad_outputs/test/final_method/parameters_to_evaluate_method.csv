@@ -1,0 +1,19 @@
+column name,column value
+unique proteins in the library,4380
+unique precursors in the library,31727
+smallest diaPASEF window,13.52
+biggest diaPASEF window,95.25
+average diaPASEF window size,22.4
+No. of covered proteins,4326
+No. of covered precursors,29669
+all proteins covered,98.8%
+all precursors covered,93.5%
+"No. of covered, doubly charged precursors",23519
+all doubly charged precursors covered,93.4%
+"No. of covered, triply charged precursors",5851
+all triply charged precursors covered,94.3%
+"No. of covered, quadruply charged precursors",293
+all quadruply charged precursors covered,90.2%
+"No. of covered, singly charged precursors",0
+all singly charged precursors covered,0
+"final A1, A2, B1, B2 values","[0.5005230375899877, 0.6185646416787716, 0.9052405184310067, 1.6189076690140176]"
