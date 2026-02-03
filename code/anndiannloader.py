@@ -205,7 +205,7 @@ class DiannLoader:
 
         if missing_cols:
             missing = '\n      * '.join(missing_cols)
-            msg = f"    Missing columns for level '{level}':\n{missing}"
+            msg = f"    Missing columns for level '{level}':\n      * {missing}"
             if strict:
                 raise ValueError(msg)
             else:
@@ -268,8 +268,14 @@ class DiannLoader:
             #keep multindex to use for pivot table later, removes need to respecify columns
             result = result.groupby(valid_groupby_cols).agg(**agg_dict).reset_index()
 
-        result['search_type'] = search_type
+        if search_type == 'fragpipe':
+            result['Run'] = result['File.Name'].apply(lambda x: os.path.splitext(os.path.basename(x))[0])
+            result['hystar_index'] = result['Run'].str.extract(r'.+_(\d+)', expand=False)
 
+        elif search_type == 'bps':
+            result['hystar_index'] = result['File.Name'].str.extract(r'.+_(\d+)', expand=False)
+
+        result['search_type'] = search_type
         return result # type: ignore
     
     def load_to_adata(
@@ -346,7 +352,7 @@ class DiannLoader:
         obs, obs_name = get_valid_cols(df, 'obs')
         layers, x = get_valid_cols(df, 'layers')
 
-        var += ['search_type']
+        var += ['search_type', 'hystar_index']
 
         df_for_pivot = df
         # Try each quantification column until one works
@@ -354,10 +360,17 @@ class DiannLoader:
 
         logger.info(f"Using '{x}' as X layer")
         pivot_df = df_for_pivot.pivot(index=obs,
-                                      columns=var_name,
+                                      columns=var,
                                       values=x)
 
-        var_df = pivot_df.columns.to_frame(index=False, name=var_name)
+        # Convert MultiIndex columns to var DataFrame
+        if isinstance(pivot_df.columns, pd.MultiIndex):
+            # MultiIndex case: convert to DataFrame with column names from var list
+            var_df = pivot_df.columns.to_frame(index=False)
+            var_df.columns = var  # Name the columns according to var list
+        else:
+            # Single index case
+            var_df = pivot_df.columns.to_frame(index=False, name=var_name)
 
         adata = ad.AnnData(X = pivot_df.values,
                    obs = pivot_df.index.to_frame().reset_index(drop=True),

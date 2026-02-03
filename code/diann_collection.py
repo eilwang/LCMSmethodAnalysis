@@ -319,6 +319,7 @@ class DiannCollection:
                             strict=False,
                             search_type=search_type
                         )
+
                     # # Add sample UUID/name to var (sample-level metadata, not obs)
                     if search_type == 'bps':
                         adata.var['UUID'] = sample_name
@@ -673,7 +674,7 @@ class DiannCollection:
                         'Level': level,
                         'n_obs': adata.n_obs,  # Number of genes/proteins/precursors
                         'n_vars': 1,  # Each sample is one column
-                        'shape': f"({n_obs}, {adata.n_vars})"
+                        'shape': f"({adata.n_obs}, {adata.n_vars})"
                     })
 
         if not summary_data:
