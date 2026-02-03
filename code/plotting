@@ -1,0 +1,70 @@
+import seaborn as sns
+
+class Plotter:
+    def __init__(self):
+        pass
+
+    def precursor_hist(self, ad, samples, x='RT', mask=['Precursor.Quantity', 'mask'], ax=None, alpha=0.5):
+        for s in samples:
+            temp = ad[:, s]
+            if ax:
+                sns.histplot(temp.layers[x], ax=ax, alpha=0.5)
+            else:
+                sns.histplot(temp.layers[x], alpha=alpha)
+
+    def precursor_scatter(self, ad, samples, x='RT', y='Intensity', mask=['Precursor.Quantity', 'mask'], ax=None, alpha=0.5):
+        for s in samples:
+            temp = ad[:, s]
+            if ax:
+                sns.scatterplot(x = temp.layers[x], y = temp.layers[y], ax=ax, alpha=0.5)
+            else:
+                sns.scatterplot(x = temp.layers[x], y = temp.layers[y], alpha=alpha)
+
+    def precursor_hist(self, collection, level, samples, x='RT', ax=None, alpha=0.5):
+        ad = collection.data[level]
+        for s in samples:
+            temp = ad[:, s]
+            if ax:
+                sns.histplot(temp.layers[x], ax=ax, alpha=0.5)
+            else:
+                sns.histplot(temp.layers[x], alpha=alpha)
+
+    def plot_precursor_mz_im(adata, s, mscollection, ms_method='sample', mz ='Precursor.Calibrated.Mz', im='Exp.1/K0'):
+        fig, ax = plt.subplots(figsize=(12, 8))
+        
+        sample = adata[:, s]
+
+        # 1. Plot DIA windows first (m/z × IM space)
+        sns.kdeplot(x = sample.layers[mz].flatten(), 
+                y = sample.layers[im].flatten(),
+                s=1, 
+                alpha=0.3, 
+                color='grey',
+                ax=ax)
+
+        if ms_method == 'sample':
+            meth = adata.var.loc[s, 'MSmeth']
+            mscollection.plot_windows([meth], 
+                                    color_by_method=True,
+                                    alpha=0.4,
+                                    show_labels=False, 
+                                    ax=ax)
+
+        # Scatter plot of precursors
+        sns.scatterplot(
+            x = sample.layers[mz][:, 0], 
+            y = sample.layers[im][:, 0],
+            hue = sample.obs['Precursor.Charge'].values,
+            palette=sns.color_palette("dark:salmon", as_cmap=True),
+            s=5, 
+            alpha=0.1,
+            ax=ax)
+
+        ax.legend(title='Precursor Charge')
+
+        legend = ax.legend_
+        for lh in legend.legend_handles:
+            lh.set_alpha(1) # Set alpha to 1 (fully opaque)
+            lh._sizes = [250]
+
+        # plt.tight_layout()
