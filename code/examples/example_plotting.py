@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ms_method_collection import MSMethodCollection
+from ms_method_collection import MicroTOFMethodCollection
 import matplotlib.pyplot as plt
 
 print("\n" + "=" * 80)
@@ -18,7 +18,7 @@ print("MS METHOD COLLECTION - PLOTTING EXAMPLES")
 print("=" * 80)
 
 # Load methods
-collection = MSMethodCollection()
+collection = MicroTOFMethodCollection()
 ms_folder = Path("/Users/eileen.wang/Desktop/diann/SampleData/methods/MS")
 
 collection.add_method(str(ms_folder / "DIA003.proteoscape.m"))

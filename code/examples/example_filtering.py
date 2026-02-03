@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from diann_collection import DiannCollection
-from filter_utils import filter_collection, create_quality_mask, filter_by_mask
+from code.archive.filter_utils import filter_collection, create_quality_mask, filter_by_mask
 import numpy as np
 
 print("Example: Filtering DiannCollection Data")

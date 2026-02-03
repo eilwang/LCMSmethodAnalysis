@@ -6,11 +6,11 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lc_method_collection import LCMethodCollection
+from lc_method_collection import VNeoMethodCollection
 import matplotlib.pyplot as plt
 
 # Create collection and load methods
-collection = LCMethodCollection()
+collection = VNeoMethodCollection()
 lc_folder = Path("/Users/eileen.wang/Desktop/diann/SampleData/methods/LC")
 
 collection.add_method('20min', str(lc_folder / '20m150nlv15.meth'))

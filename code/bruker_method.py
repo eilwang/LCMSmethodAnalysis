@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 import pandas as pd
 
-from ms_method_parser import MSMethod
+from ms_method import MicroTOFMethod
 from dia_settings_parser import DIASettings
 from archive.synchro_settings_parser import SynchroSettings
 from method_path_resolver import MethodPathResolver
@@ -19,7 +19,7 @@ class BrukerMethod:
     """
     Unified parser for Bruker TimsTOF method files.
 
-    This class combines MSMethod (instrument parameters from XML),
+    This class combines MicroTOFMethod (instrument parameters from XML),
     DIASettings (acquisition windows from SQLite), and optionally
     SynchroSettings (synchronization settings from SQLite).
 
@@ -27,7 +27,7 @@ class BrukerMethod:
     -----------
     method_path : Path
         Path to the .m method directory
-    ms : MSMethod
+    ms : MicroTOFMethod
         MS instrument parameters (calibration, collision cell, TOF, polarity configs)
     dia : DIASettings or None
         DIA acquisition settings (windows, cycles, ion mobility)
@@ -57,8 +57,8 @@ class BrukerMethod:
                 raise FileNotFoundError(f"Method directory or zip file not found: {self.method_path}")
 
         # Parse MS instrument parameters (always present)
-        # MSMethod now handles zip files internally
-        self.ms = MSMethod(self.method_path)
+        # MicroTOFMethod now handles zip files internally
+        self.ms = MicroTOFMethod(self.method_path)
 
         # Parse DIA settings (if present)
         # Create resolver to check if DIA settings exist

@@ -1,5 +1,5 @@
 """
-Comprehensive example of MSMethodCollection usage with simplified API.
+Comprehensive example of MicroTOFMethodCollection usage with simplified API.
 
 All methods now support automatic name extraction from file paths.
 """
@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ms_method_collection import MSMethodCollection
+from ms_method_collection import MicroTOFMethodCollection
 
 print("\n" + "=" * 80)
 print("MS METHOD COLLECTION - SIMPLIFIED API EXAMPLES")
@@ -19,7 +19,7 @@ ms_folder = Path("/Users/eileen.wang/Desktop/diann/SampleData/methods/MS")
 # Example 1: Add single method with auto-extracted name
 print("\n1. Add single method (name auto-extracted):")
 print("-" * 80)
-collection = MSMethodCollection()
+collection = MicroTOFMethodCollection()
 collection.add_method(str(ms_folder / "DIA003.proteoscape.m"))
 print(f"   Method added: {collection.list_methods()[0]}")
 print(f"   Extracted from: DIA003.proteoscape.m → '{collection.list_methods()[0]}'")
@@ -33,7 +33,7 @@ print(f"   Methods: {', '.join(collection.list_methods())}")
 # Example 3: Add multiple methods from list of paths
 print("\n3. Add multiple methods from list (names auto-extracted):")
 print("-" * 80)
-collection2 = MSMethodCollection()
+collection2 = MicroTOFMethodCollection()
 collection2.add_methods_from_paths([
     str(ms_folder / "DIA003.proteoscape.m"),
     str(ms_folder / "DIA015.proteoscape.m.zip")
@@ -45,7 +45,7 @@ for name in collection2.list_methods():
 # Example 4: Add multiple methods with custom names (backward compatible)
 print("\n4. Add multiple methods with custom names:")
 print("-" * 80)
-collection3 = MSMethodCollection()
+collection3 = MicroTOFMethodCollection()
 collection3.add_methods_from_paths({
     'MethodA': str(ms_folder / "DIA003.proteoscape.m"),
     'MethodB': str(ms_folder / "DIA015.proteoscape.m.zip")
@@ -57,7 +57,7 @@ for name in collection3.list_methods():
 # Example 5: Load all methods from folder (most convenient)
 print("\n5. Load all methods from folder:")
 print("-" * 80)
-collection4 = MSMethodCollection()
+collection4 = MicroTOFMethodCollection()
 collection4.add_methods_from_folder(str(ms_folder))
 print(f"   Loaded {len(collection4)} methods from folder")
 print(f"   First 5: {', '.join(collection4.list_methods()[:5])}")

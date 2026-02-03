@@ -1,0 +1,41 @@
+from filter_utils import filter_collection
+
+# Default quality filtering
+filtered = filter_collection(collection, 'precursor')
+
+# Custom thresholds
+filtered = filter_collection(
+    collection,
+    'precursor',
+    layer_thresholds={
+        'Q.Value': (0.01, 'max'),      # Keep Q-value <= 0.01
+        'RT': (10.0, 'min'),           # Keep RT >= 10 minutes
+        'RT.Stop': (50.0, 'max')       # Keep RT <= 50 minutes
+    }
+)
+
+def filter(ad, filter_name = 'mask', strict=False, layer_threshold={'Q.Value': (0.01, 'max'),'PG.Q.Value': (0.05, 'max'), 'Lib.Q.Value': (0.01, 'max'), 'Lib.PG.Q.Value': (0.05, 'max')}):
+    ad = ad.copy()
+    ad.layers[filter_name] = np.ones((ad.n_obs, ad.n_vars), dtype=bool)
+
+    for layer, threshold in layer_threshold.items():
+        layer_exists = layer in ad.layers
+        if not layer_exists:
+            if strict:
+                raise ValueError(f"Layer '{layer}' not found in AnnData layers.")
+            else:
+                print(f"Warning: Layer '{layer}' not found in AnnData layers. Skipping this threshold.")
+                continue
+        
+        #TODO: print number of filterd values. make sure to distinguish between not idnetiifed in the first place vs filterd out
+        if threshold[1] == 'max':
+            mask = ad.layers[layer] <= threshold[0]
+            ad.layers[filter_name] = ad.layers[filter_name] & mask
+        elif threshold[1] == 'min':
+            mask = ad.layers[layer] >= threshold[0]
+            ad.layers[filter_name] = ad.layers[filter_name] & mask
+        elif threshold[1] == 'equal':
+            mask = ad.layers[layer] == threshold[0]
+            ad.layers[filter_name] = ad.layers[filter_name] & mask
+            
+    return ad

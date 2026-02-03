@@ -1,16 +1,16 @@
-"""Test the to_dataframe method for MSMethodCollection."""
+"""Test the to_dataframe method for MicroTOFMethodCollection."""
 
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ms_method_collection import MSMethodCollection
+from ms_method_collection import MicroTOFMethodCollection
 
 print("Testing to_dataframe() Method")
 print("=" * 80)
 
 # Load collection
-collection = MSMethodCollection()
+collection = MicroTOFMethodCollection()
 methods_folder = "/Users/eileen.wang/Desktop/diann/SampleData/methods/MS"
 collection.add_methods_from_folder(methods_folder)
 

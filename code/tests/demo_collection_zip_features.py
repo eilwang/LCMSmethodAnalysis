@@ -1,7 +1,7 @@
 """
 Comprehensive demonstration of zip file support in collection classes.
 
-Both LCMethodCollection and MSMethodCollection now support three zip scenarios:
+Both VNeoMethodCollection and MicroTOFMethodCollection now support three zip scenarios:
 1. Individual zipped methods (one method per zip file)
 2. Single zip containing multiple methods
 3. Mixed folders with both unzipped and zipped methods
@@ -12,8 +12,8 @@ import shutil
 from pathlib import Path
 import zipfile
 
-from lc_method_collection import LCMethodCollection
-from ms_method_collection import MSMethodCollection
+from lc_method_collection import VNeoMethodCollection
+from ms_method_collection import MicroTOFMethodCollection
 
 
 def demo_lc_scenarios():
@@ -59,7 +59,7 @@ def demo_lc_scenarios():
         # Load all from folder
         print("\nLoading ALL methods from folder...")
         print("-" * 80)
-        collection = LCMethodCollection()
+        collection = VNeoMethodCollection()
         collection.add_methods_from_folder(temp_dir)
 
         print(f"\n✓ Loaded {len(collection)} total methods")
@@ -128,7 +128,7 @@ def demo_ms_scenarios():
         # Load all from folder
         print("\nLoading ALL methods from folder...")
         print("-" * 80)
-        collection = MSMethodCollection()
+        collection = MicroTOFMethodCollection()
         collection.add_methods_from_folder(temp_dir)
 
         print(f"\n✓ Loaded {len(collection)} total methods")

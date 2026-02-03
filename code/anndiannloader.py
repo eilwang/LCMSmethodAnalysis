@@ -1,4 +1,5 @@
 from ctypes.util import test
+import sys
 import pandas as pd
 import yaml
 from typing import List, Optional, Dict
@@ -14,6 +15,11 @@ logger = logging.getLogger(__name__)
 class DiannLoader:
     def __init__(self, config_path: str = "diann_columns.yaml"):
         """Initialize with DIA-NN column configuration file."""
+        # If config_path is relative, resolve it relative to this module's directory
+        if not os.path.isabs(config_path):
+            module_dir = os.path.dirname(os.path.abspath(__file__))
+            config_path = os.path.join(module_dir, config_path)
+
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
             

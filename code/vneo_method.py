@@ -7,7 +7,7 @@ import olefile
 
 from method_path_resolver import MethodPathResolver
 
-class LCMethod:
+class VNeoMethod:
     """Parse and provide structured access to LC method parameters."""
 
     def __init__(self, meth_path: str):
@@ -215,7 +215,7 @@ class LCMethod:
 #         return '\n'.join(summary_lines)
 
 #     def __repr__(self):
-#         return f"LCMethod(params={len(self.params)}, gradient={'Yes' if self.gradient is not None else 'No'})"
+#         return f"VNeoMethod(params={len(self.params)}, gradient={'Yes' if self.gradient is not None else 'No'})"
 
 
 # # Usage example
@@ -233,7 +233,7 @@ class LCMethod:
 #     25.0    5     95    0.3
 #     """
 
-#     method = LCMethod(sample_text)
+#     method = VNeoMethod(sample_text)
 #     print(method.summary())
 #     print(f"\nFlow Rate: {method.get_param('Flow Rate')}")
 #     print(f"\nGradient at 15 min: {method.get_gradient_at_time(15, '%B')}%")

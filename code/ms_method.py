@@ -13,7 +13,7 @@ from pathlib import Path
 from method_path_resolver import MethodPathResolver
 
 
-class MSMethod:
+class MicroTOFMethod:
     """Parse and provide structured access to MS method parameters."""
 
     def __init__(self, method_path: str):
@@ -486,7 +486,7 @@ class MSMethod:
     def __repr__(self):
         global_count = sum(1 for v in self.params.values() if not isinstance(v, dict))
         polarity_count = sum(1 for v in self.params.values() if isinstance(v, dict))
-        return (f"MSMethod(params={len(self.params)}, "
+        return (f"MicroTOFMethod(params={len(self.params)}, "
                 f"global={global_count}, polarity_specific={polarity_count})")
 
 
@@ -501,7 +501,7 @@ if __name__ == "__main__":
         method_path = "/Users/eileen.wang/Desktop/diann/SampleData/methods/MS/DIA003.proteoscape.m/microTOFQImpacTemAcquisition.method"
 
     # Parse method
-    method = MSMethod(method_path)
+    method = MicroTOFMethod(method_path)
 
     # Print summary
     print(method.summary())

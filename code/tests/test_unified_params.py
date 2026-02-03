@@ -1,16 +1,16 @@
-"""Test the unified params structure in MSMethod."""
+"""Test the unified params structure in MicroTOFMethod."""
 
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ms_method_collection import MSMethodCollection
+from ms_method_collection import MicroTOFMethodCollection
 
 print("Testing Unified Params Structure")
 print("=" * 80)
 
 # Load collection
-collection = MSMethodCollection()
+collection = MicroTOFMethodCollection()
 methods_folder = "/Users/eileen.wang/Desktop/diann/SampleData/methods/MS"
 collection.add_methods_from_folder(methods_folder)
 

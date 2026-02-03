@@ -1,16 +1,16 @@
 """
-Comprehensive test of plotting features in MSMethodCollection
+Comprehensive test of plotting features in MicroTOFMethodCollection
 """
 
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ms_method_collection import MSMethodCollection
+from ms_method_collection import MicroTOFMethodCollection
 import matplotlib.pyplot as plt
 
 # Load collection
-collection = MSMethodCollection()
+collection = MicroTOFMethodCollection()
 ms_folder = Path("/Users/eileen.wang/Desktop/diann/SampleData/methods/MS")
 collection.add_methods_from_folder(str(ms_folder))
 

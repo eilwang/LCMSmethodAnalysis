@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from diann_collection_loader import DiannCollectionLoader
+from code.archive.diann_collection_loader import DiannCollectionLoader
 import pandas as pd
 
 

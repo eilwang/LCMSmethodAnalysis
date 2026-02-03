@@ -4,18 +4,18 @@ import h5py
 import json
 from pathlib import Path
 from typing import Dict, List, Optional, Union
-from vneo_method_parser import LCMethod
+from vneo_method import VNeoMethod
 
 
-class LCMethodCollection:
+class VNeoMethodCollection:
     """Collection of LC methods with storage and comparison capabilities."""
 
     def __init__(self):
         """Initialize empty method collection."""
-        self.methods: Dict[str, LCMethod] = {}
+        self.methods: Dict[str, VNeoMethod] = {}
 
     @classmethod
-    def from_file(cls, filepath: str) -> 'LCMethodCollection':
+    def from_file(cls, filepath: str) -> 'VNeoMethodCollection':
         """
         Create a new collection from a saved file.
 
@@ -26,18 +26,18 @@ class LCMethodCollection:
 
         Returns:
         --------
-        LCMethodCollection
+        VNeoMethodCollection
             New collection loaded from file
 
         Example:
         --------
-        collection = LCMethodCollection.from_file('methods.pkl')
+        collection = VNeoMethodCollection.from_file('methods.pkl')
         """
         collection = cls()
         collection.load(filepath)
         return collection
 
-    def add_method(self, name: str, method: Union[str, LCMethod], overwrite: bool = False):
+    def add_method(self, name: str, method: Union[str, VNeoMethod], overwrite: bool = False):
         """
         Add a method to the collection.
 
@@ -45,8 +45,8 @@ class LCMethodCollection:
         -----------
         name : str
             Identifier for the method
-        method : str or LCMethod
-            Path to .meth file or LCMethod object
+        method : str or VNeoMethod
+            Path to .meth file or VNeoMethod object
         overwrite : bool
             If True, overwrite existing method with same name.
             If False, raise error if method already exists.
@@ -58,7 +58,7 @@ class LCMethodCollection:
             )
 
         if isinstance(method, str):
-            method = LCMethod(method)
+            method = VNeoMethod(method)
         self.methods[name] = method
 
     def add_methods_from_paths(self, method_paths: Dict[str, str], overwrite: bool = False):
@@ -186,7 +186,7 @@ class LCMethodCollection:
 
         self.add_methods_from_paths(all_methods, overwrite=overwrite)
         
-    def get_method(self, name: str) -> Optional[LCMethod]:
+    def get_method(self, name: str) -> Optional[VNeoMethod]:
         """Get method by name."""
         return self.methods.get(name)
 
@@ -239,7 +239,7 @@ class LCMethodCollection:
 
         Example:
         --------
-        collection = LCMethodCollection()
+        collection = VNeoMethodCollection()
         collection.add_method('method1', 'path/to/method1.meth')
         collection.add_method('method2', 'path/to/method2.meth')
 
@@ -716,8 +716,8 @@ class LCMethodCollection:
         """
         Load collection from HDF5 file.
 
-        Note: This loads method data as dictionaries, not LCMethod objects.
-        To reconstruct LCMethod objects, use load_hdf5_as_objects().
+        Note: This loads method data as dictionaries, not VNeoMethod objects.
+        To reconstruct VNeoMethod objects, use load_hdf5_as_objects().
 
         Parameters:
         -----------
@@ -730,7 +730,7 @@ class LCMethodCollection:
             for name in f.keys():
                 grp = f[name]
 
-                # Create a pseudo-LCMethod object with the data
+                # Create a pseudo-VNeoMethod object with the data
                 class MethodData:
                     pass
 
@@ -773,7 +773,7 @@ class LCMethodCollection:
         """
         Load collection from JSON file.
 
-        Note: This loads method data as dictionaries, not LCMethod objects.
+        Note: This loads method data as dictionaries, not VNeoMethod objects.
 
         Parameters:
         -----------
@@ -785,7 +785,7 @@ class LCMethodCollection:
 
         self.methods = {}
         for name, method_data in data.items():
-            # Create a pseudo-LCMethod object with the data
+            # Create a pseudo-VNeoMethod object with the data
             class MethodData:
                 pass
 
@@ -805,9 +805,9 @@ class LCMethodCollection:
 
     def __repr__(self) -> str:
         """String representation of collection."""
-        return f"LCMethodCollection(n_methods={len(self.methods)})"
+        return f"VNeoMethodCollection(n_methods={len(self.methods)})"
 
-    def __getitem__(self, name: str) -> LCMethod:
+    def __getitem__(self, name: str) -> VNeoMethod:
         """Allow dictionary-style access to methods."""
         return self.methods[name]
 
@@ -815,7 +815,7 @@ class LCMethodCollection:
 # Usage example
 if __name__ == "__main__":
     # Create collection
-    collection = LCMethodCollection()
+    collection = VNeoMethodCollection()
 
     # Add methods from paths
     collection.add_methods_from_paths({
@@ -824,7 +824,7 @@ if __name__ == "__main__":
     })
 
     # Or add individual methods
-    collection.add_method('method3', LCMethod('path/to/method3.meth'))
+    collection.add_method('method3', VNeoMethod('path/to/method3.meth'))
 
     # Get summary
     print(collection.summary_df())
@@ -843,14 +843,14 @@ if __name__ == "__main__":
     collection.save_json('methods.json')      # Human-readable, version control
 
     # Load from any format - auto-detects from extension
-    new_collection = LCMethodCollection()
+    new_collection = VNeoMethodCollection()
     new_collection.load('methods.pkl')  # Auto-detects pickle format
 
     # Or create collection directly from file
-    loaded_collection = LCMethodCollection.from_file('methods.h5')
+    loaded_collection = VNeoMethodCollection.from_file('methods.h5')
 
     # Or use specific loader if preferred
-    another_collection = LCMethodCollection()
+    another_collection = VNeoMethodCollection()
     another_collection.load_json('methods.json')
 
     # Access methods
