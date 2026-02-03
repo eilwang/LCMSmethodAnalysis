@@ -255,9 +255,10 @@ class DIASettings:
 
         return '\n'.join(summary_lines)
 
-    def plot_windows(self, ax=None, show_labels: bool = True,
+    def plot_windows(self, ax=None, show_labels: bool = False,
                      color_by_cycle: bool = True, uniform_color: str = 'steelblue',
                      alpha: float = 0.6, edge_color: str = 'white',
+                     linewidth: float = 0.5,
                      method_name: Optional[str] = None,
                      figsize=(12, 8)):
         """
@@ -268,7 +269,7 @@ class DIASettings:
         ax : matplotlib.axes.Axes, optional
             External axis to plot on. If None, creates new figure.
         show_labels : bool
-            Whether to show cycle ID labels on windows (default: True)
+            Whether to show cycle ID labels on windows (default: False)
         color_by_cycle : bool
             If True, color windows by cycle ID. If False, use uniform_color (default: True)
         uniform_color : str
@@ -277,6 +278,8 @@ class DIASettings:
             Transparency of window fills, 0-1 (default: 0.6)
         edge_color : str
             Color of window outlines (default: 'white')
+        linewidth : float
+            Width of window outline lines (default: 0.5)
         method_name : str, optional
             Method name to include in legend. Useful when plotting multiple methods
             on same axis for comparison.
@@ -347,7 +350,7 @@ class DIASettings:
                                 facecolor=color,
                                 edgecolor=edge_color,
                                 alpha=alpha,
-                                linewidth=1.5)
+                                linewidth=linewidth)
             ax.add_patch(rect)
 
             # Add cycle ID label

@@ -18,6 +18,7 @@ from typing import List, Optional, Dict, Tuple
 import warnings
 import sys
 from datetime import datetime
+import logging
 from anndiannloader import DiannLoader
 
 
@@ -54,6 +55,25 @@ class DiannCollection:
             self._log(f"DiannCollection Log - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             self._log("=" * 80)
 
+            # Configure Python logging to write to log file
+            # Set up handler for both this module and anndiannloader
+            log_handler = logging.StreamHandler(self.log_handle)
+            log_handler.setLevel(logging.INFO)
+            formatter = logging.Formatter('%(message)s')
+            log_handler.setFormatter(formatter)
+
+            # Configure anndiannloader logger
+            anndiann_logger = logging.getLogger('anndiannloader')
+            anndiann_logger.setLevel(logging.INFO)
+            anndiann_logger.addHandler(log_handler)
+            anndiann_logger.propagate = False  # Don't propagate to root logger
+
+            # Redirect warnings to logging
+            logging.captureWarnings(True)
+            warnings_logger = logging.getLogger('py.warnings')
+            warnings_logger.addHandler(log_handler)
+            warnings_logger.propagate = False
+
     def _log(self, message: str, to_stdout: bool = None):
         """
         Log a message to log file and optionally stdout.
@@ -83,6 +103,18 @@ class DiannCollection:
         if self.log_handle:
             self._log("\n" + "=" * 80)
             self._log(f"Log closed - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+            # Remove logging handlers
+            anndiann_logger = logging.getLogger('anndiannloader')
+            for handler in anndiann_logger.handlers[:]:
+                handler.close()
+                anndiann_logger.removeHandler(handler)
+
+            warnings_logger = logging.getLogger('py.warnings')
+            for handler in warnings_logger.handlers[:]:
+                handler.close()
+                warnings_logger.removeHandler(handler)
+
             self.log_handle.close()
             self.log_handle = None
 
@@ -464,8 +496,8 @@ class DiannCollection:
                 # Add to temporary list for potential concatenation
                 level_samples[level].append(adata)
 
-                self._log(str(adata.X))
-
+                # Log success
+                self._log(f"    ✓ {level}: {adata.shape}")
 
             except Exception as e:
                 # Handle errors during loading

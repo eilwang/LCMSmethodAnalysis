@@ -6,6 +6,10 @@ import warnings
 import anndata as ad # pyright: ignore[reportMissingImports]
 import numpy as np
 import os
+import logging
+
+# Set up logger for this module
+logger = logging.getLogger(__name__)
 
 class DiannLoader:
     def __init__(self, config_path: str = "diann_columns.yaml"):
@@ -204,10 +208,10 @@ class DiannLoader:
         # Select available columns from expected list (no duplicates)
         available_cols = [col for col in expected_cols if col in df.columns]
 
-        print(f"Loaded {len(df)} rows with {len(available_cols)}/{len(expected_cols)} columns for level '{level}'")
+        logger.info(f"Loaded {len(df)} rows with {len(available_cols)}/{len(expected_cols)} columns for level '{level}'")
 
         if missing_cols:
-            print(f"Missing columns: {missing_cols}")
+            logger.info(f"Missing columns: {missing_cols}")
 
         result = df.loc[:, available_cols]
 
@@ -333,11 +337,11 @@ class DiannLoader:
 
                 if not df[candidate].isna().any():
                     obs_name = candidate
-                    print(f"Using '{obs_name}' as obs_name")
+                    logger.info(f"Using '{obs_name}' as obs_name")
                     break
 
                 else:
-                    print(f"{candidate} is contains NaN")
+                    logger.info(f"{candidate} is contains NaN")
 
         # Smart selection of var_name: use first var column that exists
         var_name = None
@@ -357,10 +361,10 @@ class DiannLoader:
                 # Warn if var_name is not unique within sample
                 if not df[candidate].isna().any():
                     var_name = candidate
-                    print(f"Using '{var_name}' as var_name")
+                    logger.info(f"Using '{var_name}' as var_name")
                     break
                 else:
-                    print(f"{candidate} is fully NaN")
+                    logger.info(f"{candidate} is fully NaN")
 
         if var_name is None:
             raise KeyError(
@@ -423,7 +427,7 @@ class DiannLoader:
                 continue
 
             try:
-                print(f"Using '{candidate}' as x (quantification column)")
+                logger.info(f"Using '{candidate}' as x (quantification column)")
                 pivot_df = df_for_pivot.pivot(index=available_obs_cols,
                                               columns=var_name,
                                               values=candidate)
@@ -431,7 +435,7 @@ class DiannLoader:
                 break  # Success! Use this column
             except (ValueError, KeyError) as e:
                 last_error = e
-                print(f"  ⚠ Failed to pivot with '{candidate}': {type(e).__name__}")
+                logger.warning(f"Failed to pivot with '{candidate}': {type(e).__name__}")
                 continue
 
         if pivot_df is None or x_col is None:
@@ -482,7 +486,7 @@ class DiannLoader:
                 adata.obs[f'{obs_name}_original'] = temp_obs_name.values
                 # Use anndata's method to make unique
                 adata.obs_names_make_unique()
-                print("Obs names made unique using anndata method.")
+                logger.info("Obs names made unique using anndata method.")
 
         adata.var_names = adata.var[var_name]
 

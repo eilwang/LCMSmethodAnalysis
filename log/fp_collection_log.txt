@@ -1,0 +1,316 @@
+DiannCollection Log - 2026-02-02 12:41:08
+================================================================================
+Loading from direct .tsv file: report.tsv
+
+Loading report from report.tsv...
+  Loading protein level...
+Loaded 422497 rows with 16/16 columns for level 'protein'
+Using 'Protein.Ids' as obs_name
+Using 'File.Name' as var_name
+Using 'PG.MaxLFQ' as x (quantification column)
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/aligned_df.py:68: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/aligned_df.py:68: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+
+    ✓ protein: (6412, 10)
+  ⚠ Note: precursor level missing some columns: Corr.Precursor.Error.Ppm, Corrected.Precursor.Mz, Data.Points...
+  Loading precursor level...
+/Users/eileen.wang/Desktop/diann/code/anndiannloader.py:206: UserWarning: Missing columns for level 'precursor': {'Fragment.Calibrated.Mz', 'Lib.1/K0', 'Ms1.Iso.Corr.Sum', 'Precursor.Calibrated.Mz', 'Library.Precursor.Mz', 'Corrected.Precursor.Mz', 'Corr.Precursor.Error.Ppm', 'Precursor.FWHM', 'Precursor.Error.Ppm', 'Data.Points', 'Exp.1/K0'}
+  
+
+Loaded 422497 rows with 50/61 columns for level 'precursor'
+Missing columns: {'Fragment.Calibrated.Mz', 'Lib.1/K0', 'Ms1.Iso.Corr.Sum', 'Precursor.Calibrated.Mz', 'Library.Precursor.Mz', 'Corrected.Precursor.Mz', 'Corr.Precursor.Error.Ppm', 'Precursor.FWHM', 'Precursor.Error.Ppm', 'Data.Points', 'Exp.1/K0'}
+Using 'Precursor.Id' as obs_name
+Using 'File.Name' as var_name
+Using 'Precursor.Quantity' as x (quantification column)
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/aligned_df.py:68: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/aligned_df.py:68: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+
+    ✓ precursor: (79173, 10)
+
+Adding to collection...
+  Adding protein level...
+    ✓ Added protein with shape: (6412, 10)
+  Adding precursor level...
+    ✓ Added precursor with shape: (79173, 10)
+
+✓ Added sample 'report' to collection
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/anndata.py:1756: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/anndata.py:844: UserWarning: 
+AnnData expects .var.index to contain strings, but got values like:
+    [nan, nan, nan, nan, nan]
+
+    Inferred to be: empty
+
+  names = self._prep_dim_index(names, "var")
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/anndata.py:844: UserWarning: 
+AnnData expects .var.index to contain strings, but got values like:
+    [nan, nan, nan, nan, nan]
+
+    Inferred to be: empty
+
+  names = self._prep_dim_index(names, "var")
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/anndata.py:747: UserWarning: 
+AnnData expects .var.index to contain strings, but got values like:
+    [nan, nan, nan, nan, nan]
+
+    Inferred to be: empty
+
+  value_idx = self._prep_dim_index(value.index, attr)
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/anndata.py:844: UserWarning: 
+AnnData expects .var.index to contain strings, but got values like:
+    [nan, nan, nan, nan, nan]
+
+    Inferred to be: empty
+
+  names = self._prep_dim_index(names, "var")
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/anndata.py:747: UserWarning: 
+AnnData expects .var.index to contain strings, but got values like:
+    [nan, nan, nan, nan, nan]
+
+    Inferred to be: empty
+
+  value_idx = self._prep_dim_index(value.index, attr)
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/anndata.py:844: UserWarning: 
+AnnData expects .var.index to contain strings, but got values like:
+    [nan, nan, nan, nan, nan]
+
+    Inferred to be: empty
+
+  names = self._prep_dim_index(names, "var")
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/anndata.py:747: UserWarning: 
+AnnData expects .var.index to contain strings, but got values like:
+    [nan, nan, nan, nan, nan]
+
+    Inferred to be: empty
+
+  value_idx = self._prep_dim_index(value.index, attr)
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/anndata.py:844: UserWarning: 
+AnnData expects .var.index to contain strings, but got values like:
+    [nan, nan, nan, nan, nan]
+
+    Inferred to be: empty
+
+  names = self._prep_dim_index(names, "var")
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/anndata.py:747: UserWarning: 
+AnnData expects .var.index to contain strings, but got values like:
+    [nan, nan, nan, nan, nan]
+
+    Inferred to be: empty
+
+  value_idx = self._prep_dim_index(value.index, attr)
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/anndata.py:844: UserWarning: 
+AnnData expects .var.index to contain strings, but got values like:
+    [nan, nan, nan, nan, nan]
+
+    Inferred to be: empty
+
+  names = self._prep_dim_index(names, "var")
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/anndata.py:844: UserWarning: 
+AnnData expects .var.index to contain strings, but got values like:
+    [('HeLa_100pg_2ACN01TFA_0015DDM_1uL_VNeo_Aurora15_16_25m150nlv5_DIA75msW83_TT0000209_B-E11_1_14610',), ('HeLa_100pg_2ACN01TFA_0015DDM_1uL_VNeo_Aurora15_16_25m150nlv5_DIA75ms_TT0000199_B-E11_1_14600',), ('HeLa_100pg_2ACN01TFA_0015DDM_1uL_VNeo_Aurora15_16_25m150nlv5_DIA75ms_TT0000206_B-E1_1_14607',), ('HeLa_100pg_2ACN01TFA_0015DDM_1uL_VNeo_Aurora15_16_25m200nlv5_DIA75msW83_TT0000208_B-E1_1_14609',), ('HeLa_100pg_2ACN01TFA_0015DDM_1uL_VNeo_Aurora15_16_25m200nlv5_DIA75ms_TT0000207_B-E1_1_14608',)]
+
+    Inferred to be: mixed
+
+  names = self._prep_dim_index(names, "var")
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/seaborn/distributions.py:1176: UserWarning: The following kwargs were not used by contour: 's'
+  cset = contour_func(
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/4057879781.py:4: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.scatterplot(x = m2.layers['Precursor.Mz'].flatten(), y = m2.layers['IM'].flatten(),  alpha=0.2, color='grey', marker='.', palette='tab10')
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/61051190.py:4: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.scatterplot(x = m2.layers['Precursor.Mz'].flatten(), y = m2.layers['IM'].flatten(),  alpha=0.01, color='grey', marker='.', palette='tab10')
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/2612398279.py:4: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.scatterplot(x = m2.layers['Precursor.Mz'].flatten(), y = m2.layers['IM'].flatten(),  alpha=0.01, color='darkgrey', marker='.', palette='tab10')
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/2557616991.py:3: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.scatterplot(x = m1.layers['Precursor.Mz'].flatten(), y = m1.layers['IM'].flatten(), alpha=0.25, color='darkgrey', marker='+', palette=sns.color_palette("dark:salmon", as_cmap=True))
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/2557616991.py:4: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.scatterplot(x = m2.layers['Precursor.Mz'].flatten(), y = m2.layers['IM'].flatten(),  alpha=0.01, color='blue', marker='.', palette='tab10')
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/4017445538.py:3: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.scatterplot(x = m1.layers['Precursor.Mz'].flatten(), y = m1.layers['IM'].flatten(), alpha=0.25, s=3, color='darkgrey', marker='+', palette=sns.color_palette("dark:salmon", as_cmap=True))
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/4017445538.py:4: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.scatterplot(x = m2.layers['Precursor.Mz'].flatten(), y = m2.layers['IM'].flatten(),  alpha=0.01, s=3, color='blue', marker='.', palette='tab10')
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/3222881903.py:3: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.scatterplot(x = m1.layers['Precursor.Mz'].flatten(), y = m1.layers['IM'].flatten(), alpha=0.25, s=3, color='darkgrey', marker='+', palette=sns.color_palette("dark:salmon", as_cmap=True))
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/3222881903.py:4: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.scatterplot(x = m2.layers['Precursor.Mz'].flatten(), y = m2.layers['IM'].flatten(),  alpha=0.1, s=3, color='blue', marker='.', palette='tab10')
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/1821122122.py:3: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.scatterplot(x = m1.layers['Precursor.Mz'].flatten(), y = m1.layers['IM'].flatten(), alpha=0.25, s=5, color='darkgrey', marker='+', palette=sns.color_palette("dark:salmon", as_cmap=True))
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/1821122122.py:4: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.scatterplot(x = m2.layers['Precursor.Mz'].flatten(), y = m2.layers['IM'].flatten(),  alpha=0.1, s=5, color='blue', marker='.', palette='tab10')
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/1719783650.py:3: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.scatterplot(x = m1.layers['Precursor.Mz'].flatten(), y = m1.layers['IM'].flatten(), alpha=0.25, s=5, color='darkgrey', marker='+', palette=sns.color_palette("dark:salmon", as_cmap=True))
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/1719783650.py:4: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.scatterplot(x = m2.layers['Precursor.Mz'].flatten(), y = m2.layers['IM'].flatten(),  alpha=0.25, s=5, color='blue', marker='.', palette='tab10')
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/3926051684.py:3: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.scatterplot(x = m1.layers['Precursor.Mz'].flatten(), y = m1.layers['IM'].flatten(), alpha=0.25, s=5, color='darkgrey', marker='+', palette=sns.color_palette("dark:salmon", as_cmap=True))
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/3926051684.py:4: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.scatterplot(x = m2.layers['Precursor.Mz'].flatten(), y = m2.layers['IM'].flatten(),  alpha=0.25, s=5, color='blue', marker='.', palette='tab10')
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/1242420566.py:1: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.histplot(x = m1.layers['Precursor.Mz'].flatten(), y = m1.layers['IM'].flatten(), alpha=0.25, s=5, color='darkgrey', marker='+', palette=sns.color_palette("dark:salmon", as_cmap=True))
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/677967097.py:1: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.histplot(x = m2.layers['Precursor.Mz'].flatten(), y = m2.layers['IM'].flatten(),  alpha=0.25, s=5, color='blue', marker='.', palette='tab10')
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/1365719815.py:1: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.histplot(x = m1.layers['Precursor.Mz'].flatten(), y = m1.layers['IM'].flatten(), alpha=0.5, palette='icefie')
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/2569543168.py:1: UserWarning: Ignoring `palette` because no `hue` variable has been assigned.
+  sns.histplot(x = m1.layers['Precursor.Mz'].flatten(), y = m1.layers['IM'].flatten(), alpha=0.5, palette='icefire')
+
+/var/folders/fw/_hz2f4mj6pdc3ffplz4b82lc0000gq/T/ipykernel_22839/572917370.py:2: UserWarning: No artists with labels found to put in legend.  Note that artists whose label start with an underscore are ignored when legend() is called with no argument.
+  plt.legend()
+

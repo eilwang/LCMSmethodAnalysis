@@ -482,6 +482,7 @@ class MSMethodCollection:
                     color_by_method: bool = True,
                     alpha: float = 0.6,
                     edge_color: str = 'white',
+                    linewidth: float = 0.5,
                     figsize=(14, 8),
                     show_labels: bool = False,
                     ax=None):
@@ -498,6 +499,8 @@ class MSMethodCollection:
             Transparency of window fills, 0-1 (default: 0.6)
         edge_color : str
             Color of window outlines (default: 'white')
+        linewidth : float
+            Width of window outline lines (default: 0.5)
         figsize : tuple
             Figure size (default: (14, 8)), only used if ax is None
         show_labels : bool
@@ -522,6 +525,8 @@ class MSMethodCollection:
         for name in method_names:
             if name in self.methods and self.methods[name].dia is not None:
                 methods_with_dia.append(name)
+            if name not in self.methods:
+                print(f"Warning: Method '{name}' not found in collection")
 
         if not methods_with_dia:
             print("Warning: No methods with DIA settings found")
@@ -569,6 +574,7 @@ class MSMethodCollection:
                     uniform_color=colors[i],
                     alpha=alpha,
                     edge_color=edge_color,
+                    linewidth=linewidth,
                     method_name=name
                 )
 
@@ -589,6 +595,7 @@ class MSMethodCollection:
                     color_by_cycle=True,
                     alpha=alpha,
                     edge_color=edge_color,
+                    linewidth=linewidth,
                     method_name=name
                 )
                 # For color_by_cycle mode, create a simple legend entry
