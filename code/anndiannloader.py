@@ -163,7 +163,8 @@ class DiannLoader:
         filepath: str,
         level: str,
         sections: Optional[List[str]] = None,
-        strict: bool = False
+        strict: bool = False,
+        search_type: str = 'bps'
     ) -> pd.DataFrame:
         """
         Load DIA-NN data with column selection based on level.
@@ -209,7 +210,7 @@ class DiannLoader:
             if strict:
                 raise ValueError(msg)
             else:
-                warnings.warn(msg)
+                logger.info(msg)
 
         # Select available columns from expected list (no duplicates)
         available_cols = [col for col in expected_cols if col in df.columns]
@@ -271,6 +272,11 @@ class DiannLoader:
             #keep multindex to use for pivot table later, removes need to respecify columns
             result = result.groupby(valid_groupby_cols).agg(**agg_dict).reset_index()
 
+        if search_type == 'fragpipe':
+            result['search_type'] = 'fragpipe'
+            result['Run'] = result['File.Name'].str.extract(r'.+\/(.+)\.d$', expand=False)
+        else:
+            result['search_type'] = 'bps'
             # result = result.drop(columns=pr_obs)
 
         return result # type: ignore
@@ -283,6 +289,7 @@ class DiannLoader:
         strict: bool = False,
         output_path: Optional[str] = None,
         mk_dir: bool = True,
+        search_type: str = 'bps'
     ) -> ad.AnnData:
         """
         Load DIA-NN data with column selection based on level into an AnnData object.
@@ -312,16 +319,12 @@ class DiannLoader:
             filepath,
             level,
             sections,
-            strict
+            strict, 
+            search_type=search_type
         )
 
         # Create AnnData object
         level_config = self.config['levels'][level]
-
-        #TODO:
-
-        # self.config['levels'][level] = df
-        # return
 
         # Smart selection of obs_name: use first obs column that exists and has unique values
         obs_name = None
@@ -352,6 +355,7 @@ class DiannLoader:
         # Smart selection of var_name: use first var column that exists
         var_name = None
         var_candidates = level_config.get('var', [])
+        var_candidates += ['search_type']
 
         # Ensure var_candidates is always a list of strings
         # Handle both single string values and list values from YAML
@@ -398,25 +402,6 @@ class DiannLoader:
 
         # # Filter to only obs columns that actually exist in df
         available_obs_cols = [col for col in obs_cols if col in df.columns]
-
-        # # Check if obs_name has duplicate values - if so, need to aggregate
-        # needs_aggregation = df[obs_name].duplicated().any()
-
-        # # If we need aggregation, aggregate ALL columns (not just those in config)
-        # if needs_aggregation:
-        #     print(f"  Aggregating duplicate '{obs_name}' values using max()")
-        #     # Group by obs columns and var to get one value per (obs, var) combination
-        #     groupby_cols = available_obs_cols + [var_name]
-
-        #     # Find all numeric columns that should be aggregated (everything except groupby cols)
-        #     numeric_cols = df.select_dtypes(include=['number']).columns
-        #     cols_to_aggregate = [col for col in numeric_cols if col not in groupby_cols]
-
-        #     # Aggregate using max for all numeric columns
-        #     agg_dict = {col: 'max' for col in cols_to_aggregate}
-        #     df_for_pivot = df.groupby(groupby_cols, as_index=False).agg(agg_dict)
-        # else:
-        #     df_for_pivot = df
 
         df_for_pivot = df
         # Try each quantification column until one works
@@ -478,8 +463,8 @@ class DiannLoader:
         # Check and set observation names
         temp_obs_name = adata.obs[obs_name]
 
-        # Set obs_names first
-        adata.obs_names = temp_obs_name
+        # Set obs_names first (explicitly convert to string to avoid anndata warning)
+        adata.obs_names = temp_obs_name.astype(str)
 
         # Then make unique if needed using anndata's built-in method
         if not adata.obs_names.is_unique:
@@ -494,7 +479,8 @@ class DiannLoader:
                 adata.obs_names_make_unique()
                 logger.info("Obs names made unique using anndata method.")
 
-        adata.var_names = adata.var[var_name]
+        # Explicitly convert var_names to string to avoid anndata warning
+        adata.var_names = adata.var[var_name].astype(str)
 
         # not using layers in the config to account for additional processing that can added extra layers
         # Only use columns that actually exist

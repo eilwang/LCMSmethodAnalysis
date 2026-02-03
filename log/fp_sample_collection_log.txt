@@ -1,16 +1,62 @@
-DiannCollection Log - 2026-02-02 11:34:52
+DiannCollection Log - 2026-02-03 13:19:22
 ================================================================================
 Loading from direct .tsv file: report.tsv
 
 Loading report from report.tsv...
   ⚠ Note: precursor level missing some columns: Corr.Precursor.Error.Ppm, Corrected.Precursor.Mz, Data.Points...
   Loading precursor level...
-    ⚠ Could not load precursor level: NameError
+Missing columns for level 'precursor': {'Ms1.Iso.Corr.Sum', 'Lib.1/K0', 'Corr.Precursor.Error.Ppm', 'Data.Points', 'Precursor.FWHM', 'Exp.1/K0', 'Precursor.Error.Ppm', 'Fragment.Calibrated.Mz', 'Corrected.Precursor.Mz', 'Precursor.Calibrated.Mz', 'Library.Precursor.Mz'}
+Loaded 422497 rows with 50/61 columns for level 'precursor'
+Missing columns: {'Ms1.Iso.Corr.Sum', 'Lib.1/K0', 'Corr.Precursor.Error.Ppm', 'Data.Points', 'Precursor.FWHM', 'Exp.1/K0', 'Precursor.Error.Ppm', 'Fragment.Calibrated.Mz', 'Corrected.Precursor.Mz', 'Precursor.Calibrated.Mz', 'Library.Precursor.Mz'}
+Using 'Precursor.Id' as obs_name
+Using 'File.Name' as var_name
+Using 'Precursor.Quantity' as x (quantification column)
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/aligned_df.py:68: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/aligned_df.py:68: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+
+    ✓ precursor: (79173, 10)
   Loading protein level...
-    ⚠ Could not load protein level: NameError
-  Loading gene level...
-    ⚠ Could not load gene level: NameError
+Loaded 422497 rows with 16/16 columns for level 'protein'
+Using 'Protein.Ids' as obs_name
+Using 'File.Name' as var_name
+Using 'PG.MaxLFQ' as x (quantification column)
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/aligned_df.py:68: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/aligned_df.py:68: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+
+    ✓ protein: (6412, 10)
 
 Adding to collection...
+  Adding precursor level...
+    ✓ Added precursor with shape: (79173, 10)
+  Adding protein level...
+    ✓ Added protein with shape: (6412, 10)
 
 ✓ Added sample 'report' to collection
+mns: {'Ms1.Iso.Corr.Sum', 'Lib.1/K0', 'Corr.Precursor.Error.Ppm', 'Data.Points', 'Precursor.FWHM', 'Exp.1/K0', 'Precursor.Error.Ppm', 'Fragment.Calibrated.Mz', Using 'Precursor.Id' as obs_name
+Using 'File.Name' as var_name
+Using 'Precursor.Quantity' as x (quantification column)
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_co/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/aligned_df.py:68: ImplicitModificationWarning: Transforming to str index./opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_co/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/aligned_df.py:68: ImplicitModificationWarning: Transforming to str index.Loaded 422497 rows with 16/16 columns for level 'protein'
+Using 'Protein.Ids' as obs_name
+Using 'File.Name' as var_name
+Using 'PG.MaxLFQ' as x (quantification column)
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_co/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/aligned_df.py:68: ImplicitModificationWarning: Transforming to str index./opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_co/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/aligned_df.py:68: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+
+warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+
+Loaded 422497 rows with 16/16 columns for level 'protein'
+Using 'Protein.Ids' as obs_name
+Using 'File.Name' as var_name
+Using 'PG.MaxLFQ' as x (quantification column)
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/aligned_df.py:68: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+
+/opt/anaconda3/envs/diann_report_venv/lib/python3.9/site-packages/anndata/_core/aligned_df.py:68: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+

@@ -319,7 +319,8 @@ class DiannCollection:
                     )
 
                     # Add sample UUID/name to var (sample-level metadata, not obs)
-                    adata.var['UUID'] = sample_name
+                    if search_type == 'bps':
+                        adata.var['UUID'] = sample_name
 
                     # Add search type to var
                     adata.var['search_type'] = search_type
@@ -488,11 +489,8 @@ class DiannCollection:
                 )
 
                 # Add sample UUID/name to var (sample-level metadata, not obs)
-                adata.var['UUID'] = sample_name
-
-                # Add search type to var
-                adata.var['search_type'] = search_type
-
+                if search_type == 'bps':
+                    adata.var['UUID'] = sample_name
                 # Add to temporary list for potential concatenation
                 level_samples[level].append(adata)
 
@@ -566,7 +564,7 @@ class DiannCollection:
             # Filter to specific sample (select columns)
             if 'Sample' not in adata.var.columns:
                 raise KeyError("Sample column not found in var DataFrame")
-            mask = adata.var['UUID'] == sample
+            mask = adata.var_names == sample
             if mask.sum() == 0:
                 raise ValueError(f"Sample '{sample}' not found in level '{level}'")
             return adata[:, mask].copy()  # Select columns, not rows
@@ -590,13 +588,13 @@ class DiannCollection:
         if level is not None:
             if level not in self.data:
                 return []
-            return sorted(self.data[level].var['UUID'].unique().tolist())
+            return sorted(self.data[level].var_names.unique().tolist())
         else:
             # Return union of all samples across all levels
             all_samples = set()
             for adata in self.data.values():
                 if 'Sample' in adata.var.columns:
-                    all_samples.update(adata.var['UUID'].unique())
+                    all_samples.update(adata.var_names.unique())
             return sorted(list(all_samples))
 
     def list_levels(self) -> List[str]:
@@ -637,13 +635,13 @@ class DiannCollection:
 
         if samples is not None:
             # Filter to specific samples (select columns)
-            mask = adata.var['UUID'].isin(samples)
+            mask = adata.var_names.isin(samples)
             adata = adata[:, mask].copy()
 
         # Convert to DataFrame (long format)
         # This creates a melted format with genes × samples
         df_list = []
-        for i, sample in enumerate(adata.var['UUID']):
+        for i, sample in enumerate(adata.var_names):
             sample_df = adata.obs.copy()
             sample_df['Sample'] = sample
             sample_df['X'] = adata.X[:, i]
@@ -664,7 +662,7 @@ class DiannCollection:
 
         for level, adata in self.data.items():
             if 'Sample' in adata.var.columns:
-                samples = adata.var['UUID'].unique()
+                samples = adata.var_names.unique()
                 for sample in samples:
                     # Each sample is a column, so n_obs is constant across samples
                     summary_data.append({
