@@ -354,12 +354,11 @@ class DiannLoader:
 
         var += ['search_type', 'hystar_index']
 
-        df_for_pivot = df
         # Try each quantification column until one works
         pivot_df = None
 
         logger.info(f"Using '{x}' as X layer")
-        pivot_df = df_for_pivot.pivot(index=obs,
+        pivot_df = df.pivot(index=obs,
                                       columns=var,
                                       values=x)
 
@@ -394,10 +393,10 @@ class DiannLoader:
         # Explicitly convert var_names to string to avoid anndata warning
         adata.var_names = adata.var[var_name].astype(str)
 
-        layers = df_for_pivot.columns[~df_for_pivot.columns.isin(var + obs)]
+        layers = df.columns[~df.columns.isin(var + obs)]
 
         for l in layers:
-            pivot_df = df_for_pivot.pivot(index=obs,
+            pivot_df = df.pivot(index=obs,
                                           columns=var_name,
                                           values=l)
             
