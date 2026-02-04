@@ -73,12 +73,12 @@ class MSMethodCollection:
             if isinstance(method, str):
                 method_path = Path(method)
                 name = method_path.stem
-                name = name.replace('.proteoscape', '')  # Remove .m if present
             else:
                 raise ValueError("name parameter is required when passing a BrukerMethod object")
         elif isinstance(method, str):
             method_path = Path(method)
-            name = name.replace('.proteoscape', '')
+        
+        name = name.replace('.proteoscape', '')
 
         # Check for duplicates
         if name in self.methods:
