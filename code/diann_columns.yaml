@@ -18,8 +18,8 @@ levels:
       - All Mapped Genes
       - Lib.Index
     layers:
-      - Precursor.Quantity
       - Precursor.Normalised
+      - Precursor.Quantity
       - IM
       - iIM
       - Predicted.IM

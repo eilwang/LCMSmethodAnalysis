@@ -399,7 +399,8 @@ class VNeoMethodCollection:
                       twin_axes: bool = False,
                       markers: bool = False,
                       figsize=(12, 6),
-                      ax=None):
+                      ax=None,
+                      x_shift=0):
         """
         Plot gradient profiles from multiple methods overlaid.
 
@@ -553,7 +554,7 @@ class VNeoMethodCollection:
                                 'markeredgewidth': 0.8
                             })
 
-                        current_ax.plot(method.gradient[x_col],
+                        current_ax.plot(method.gradient[x_col] + x_shift,
                                        method.gradient[y_col],
                                        **plot_kwargs)
 
