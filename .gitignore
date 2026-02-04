@@ -13,6 +13,10 @@ SampleData/BPS/**/tims-diann.result/*.csv
 SampleData/BPS/**/processing-run/*/tims-diann.result/*.csv
 SampleData/BPS/**/processing-run/*/tims-diann.result/*.tsv
 
+# Output directories
+outputs/
+output/
+
 # Python
 __pycache__/
 *.py[cod]
