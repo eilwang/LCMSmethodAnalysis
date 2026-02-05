@@ -1,6 +1,6 @@
 import pandas as pd
 
-def map_lcms_methods(collection, sequence, existing='fillna'):
+def map_lcms_methods(collection, sequence, existing='fillna', join_on=None):
     """In place function to map LCMS methods to DiannCollection from sequence csv file"""
     df = pd.read_csv(sequence)
     df['lc meth'] = df['Instrument Method'].str.extract(r'.+\\(.+)$')
@@ -11,5 +11,12 @@ def map_lcms_methods(collection, sequence, existing='fillna'):
     
     for level in collection.data.keys():
         ad = collection.data[level]
+
+        if join_on:
+            temp = ad.var_names
+            ad.var_names = ad.var[join_on]
         ad.var = ad.var.drop(columns=['lc meth', 'sample', 'ms meth'], errors='ignore')
         ad.var = ad.var.join(df[['lc meth', 'sample', 'ms meth']].set_index('sample'), how='left')
+        
+        if join_on:
+            ad.var_names = temp
