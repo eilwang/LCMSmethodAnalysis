@@ -78,8 +78,8 @@ levels:
       - File.Name # entire file path
       - Run # basename
     obs:
-      - Protein.Ids
-      - Protein.Group
+      - Protein.Group # most likely set of proteins including parsimony
+      - Protein.Ids # all proteins containing the peptide
       - Protein.Names
       - Genes
 
