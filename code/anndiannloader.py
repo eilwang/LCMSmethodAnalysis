@@ -286,7 +286,8 @@ class DiannLoader:
         strict: bool = False,
         output_path: Optional[str] = None,
         mk_dir: bool = True,
-        search_type: str = 'bps'
+        search_type: str = 'bps',
+        df: Optional[pd.DataFrame] = None
     ) -> ad.AnnData:
         """
         Load DIA-NN data with column selection based on level into an AnnData object.
@@ -312,13 +313,14 @@ class DiannLoader:
             AnnData object with selected columns
         """
 
-        df = self.load_to_df(
-            filepath,
-            level,
-            sections,
-            strict, 
-            search_type=search_type
-        )
+        if df is None:
+            df = self.load_to_df(
+                filepath,
+                level,
+                sections,
+                strict, 
+                search_type=search_type
+            )
 
         # Create AnnData object
         level_config = self.config['levels'][level]

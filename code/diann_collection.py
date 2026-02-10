@@ -7,6 +7,7 @@ same pattern as MSMethodCollection and LCMethodCollection.
 Stores searches as combined AnnData objects by level for efficient access and manipulation.
 """
 
+from functools import reduce
 import pandas as pd
 import anndata as ad
 import zipfile
@@ -312,6 +313,7 @@ class DiannCollection:
                     self._log(f"  Loading {level} level...")
 
                         # Load with strict=False to be permissive
+                    
                     adata = self.loader.load_to_adata(
                             str(results_path),
                             level=level,
@@ -359,23 +361,22 @@ class DiannCollection:
                         join='outer',
                         merge='first'  # Keep first value for non-aligned obs metadata
                     )
+                self._log(f"Merged obs DataFrame:\n{obs_merged}")
 
                 # If level already exists in collection, concatenate with existing data
                 if level in self.data:
                     self._log(f"    Concatenating with existing {level} data...")
                     existing = self.data[level]
+
                     combined = ad.concat(
                         [existing, combined],
                         axis=1,  # Concatenate along var (columns/samples) axis
                         join='outer',
                         merge='first'  # Keep first value for non-aligned obs metadata
                     )
-                    self.data[level] = combined
-                    self._log(f"    ✓ Combined shape: {self.data[level].shape}")
-                else:
-                    # First time adding this level
-                    self.data[level] = combined
-                    self._log(f"    ✓ Added {level} with shape: {self.data[level].shape}")
+                
+                self.data[level] = combined
+                self._log(f"    ✓ Added {level} with shape: {self.data[level].shape}")
 
         self._log(f"\n✓ Added {len(results_files)} samples to collection")
 
@@ -521,25 +522,39 @@ class DiannCollection:
                     combined = ad.concat(level_samples[level],
                         axis=1,  # Concatenate along var (columns/samples) axis
                         join='outer',
-                        merge='first'  # Keep first value for non-aligned obs metadata
+                        # merge='unique'  # Keep first value for non-aligned obs metadata
                     )
+                obs_cat = pd.concat([ad.obs for ad in level_samples[level]])
+
+                obs_merged = obs_cat.groupby(combined.obs_names.name).agg(lambda x: pd.Series(x).unique().tolist())
+                obs_merge = reduce(lambda left, right: pd.merge(left.obs, right.obs, on='key', how='outer'), level_samples[level])
+                self._log(f"Merged obs DataFrame:\n{obs_merge}")
 
                 # If level already exists in collection, concatenate with existing data
                 if level in self.data:
                     self._log(f"    Concatenating with existing {level} data...")
                     existing = self.data[level]
+
+                    obs_merge = pd.merge(existing.obs, obs_merge, on='key', how='outer')
+
                     combined = ad.concat(
                         [existing, combined],
                         axis=1,  # Concatenate along var (columns/samples) axis
                         join='outer',
-                        merge='first'  # Keep first value for non-aligned obs metadata
+                        # merge='unique'  # Keep first value for non-aligned obs metadata
                     )
-                    self.data[level] = combined
-                    self._log(f"    ✓ Combined shape: {self.data[level].shape}")
-                else:
-                    # First time adding this level
-                    self.data[level] = combined
-                    self._log(f"    ✓ Added {level} with shape: {self.data[level].shape}")
+                original_index = combined.obs.index.copy()
+                obs_merge.reindex(original_index)
+
+                combined.obs = obs_merge
+
+                self.data[level] = combined
+                self._log(f"    ✓ Combined shape: {self.data[level].shape}")
+                # else:
+                #     # First time adding this level
+                    
+                #     self.data[level] = combined
+                #     self._log(f"    ✓ Added {level} with shape: {self.data[level].shape}")
 
         self._log(f"\n✓ Added sample '{sample_name}' to collection")
 
