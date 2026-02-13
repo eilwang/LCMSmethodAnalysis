@@ -50,19 +50,19 @@ def check_precursor_in_windows(
 
 
 def analyze_sample_coverage(
-    sample_adata: ad.AnnData,
+    sample_obj: ad.AnnData | pd.DataFrame,
     dia_windows: pd.DataFrame,
-    mz_col: str = 'Precursor.Calibrated.Mz',
-    im_col: str = 'Exp.1/K0',
-    use_layers: bool = True
+    mz: str = 'Precursor.Calibrated.Mz',
+    im: str = 'Exp.1/K0'
+    # use_layers: bool = True
 ) -> pd.DataFrame:
     """
     Analyze which precursors in a sample fall within DIA windows.
 
     Parameters:
     -----------
-    sample_adata : ad.AnnData
-        AnnData object for a single sample (single column from collection)
+    sample_obj : ad.AnnData or pd.DataFrame
+        AnnData object or DataFrame for a single sample (single column from collection)
         Must have precursor m/z and ion mobility data
     dia_windows : pd.DataFrame
         DataFrame with DIA window definitions
@@ -86,61 +86,62 @@ def analyze_sample_coverage(
         - distance_to_nearest: Distance to nearest window if not covered
     """
     # Extract precursor m/z and ion mobility values
-    if use_layers:
-        if mz_col not in sample_adata.layers:
-            raise ValueError(f"Column '{mz_col}' not found in layers. Available: {list(sample_adata.layers.keys())}")
-        if im_col not in sample_adata.layers:
-            raise ValueError(f"Column '{im_col}' not found in layers. Available: {list(sample_adata.layers.keys())}")
+    # if use_layers:
+    #     if mz_col not in sample_adata.layers:
+    #         raise ValueError(f"Column '{mz_col}' not found in layers. Available: {list(sample_adata.layers.keys())}")
+    #     if im_col not in sample_adata.layers:
+    #         raise ValueError(f"Column '{im_col}' not found in layers. Available: {list(sample_adata.layers.keys())}")
 
-        mz_values = sample_adata.layers[mz_col].flatten()
-        im_values = sample_adata.layers[im_col].flatten()
-    else:
-        if mz_col not in sample_adata.obs.columns:
-            raise ValueError(f"Column '{mz_col}' not found in obs. Available: {list(sample_adata.obs.columns)}")
-        if im_col not in sample_adata.obs.columns:
-            raise ValueError(f"Column '{im_col}' not found in obs. Available: {list(sample_adata.obs.columns)}")
+    if isinstance(sample_obj, ad.AnnData):
+        sample_df = pd.DataFrame({mz: sample_obj.layers[mz_col].flatten(),
+                                  im: sample_obj.layers[im_col].flatten()})
+        
+        sample_df = pd.concat([sample_df, sample_obj.obs.reset_index()], axis=1)
 
-        mz_values = sample_adata.obs[mz_col].values
-        im_values = sample_adata.obs[im_col].values
+    elif isinstance(sample_obj, pd.DataFrame):
+        sample_df = sample_obj.copy()
+
+
+        # if mz_col not in sample_adata.obs.columns:
+        #     raise ValueError(f"Column '{mz_col}' not found in obs. Available: {list(sample_adata.obs.columns)}")
+        # if im_col not in sample_adata.obs.columns:
+        #     raise ValueError(f"Column '{im_col}' not found in obs. Available: {list(sample_adata.obs.columns)}")
+
+        # mz_values = sample_adata.obs[mz_col].values
+        # im_values = sample_adata.obs[im_col].values
 
     # Remove any NaN values
-    valid_mask = ~(np.isnan(mz_values) | np.isnan(im_values))
-    mz_values = mz_values[valid_mask]
-    im_values = im_values[valid_mask]
+    sample_df = sample_df.dropna(axis=0, subset=[mz, im])
 
-    # Initialize results
-    results = []
 
     # Check each precursor
-    for i, (mz, im) in enumerate(zip(mz_values, im_values)):
-        in_window, window_id = check_precursor_in_windows(mz, im, dia_windows)
-
-        result = {
-            'precursor_idx': i,
-            'mz': mz,
-            'im': im,
-            'in_window': in_window,
-            'window_id': window_id if window_id is not None else -1
-        }
+    sample_df.loc[:, ['in_window', 'window_id']] = sample_df.apply(lambda row: check_precursor_in_windows(row[mz], row[im], dia_windows), axis=1, result_type='expand')
+    sample_df['distance_to_nearest'] = sample_df.apply(lambda row: calculate_distance_to_nearest_window(row[mz], row[im], dia_windows) if not row['in_window'] else 0.0, axis=1)
+        # result = {
+        #     'precursor_idx': i,
+        #     'mz': mz,
+        #     'im': im,
+        #     'in_window': in_window,
+        #     'window_id': window_id if window_id is not None else -1
+        # }
 
         # Calculate distance to nearest window if not covered
-        if not in_window:
-            result['distance_to_nearest'] = calculate_distance_to_nearest_window(
-                mz, im, dia_windows
-            )
-        else:
-            result['distance_to_nearest'] = 0.0
+    
+        # if not in_window:
+        #     result['distance_to_nearest'] = calculate_distance_to_nearest_window(
+        #         mz, im, dia_windows
+        #     )
+        # else:
+        #     result['distance_to_nearest'] = 0.0
 
-        results.append(result)
+        # results.append(result)
 
     # Convert to DataFrame and merge with original obs data
-    results_df = pd.DataFrame(results)
+    # results_df = pd.DataFrame(results)
 
-    # Add relevant obs columns
-    obs_subset = sample_adata.obs.iloc[valid_mask].reset_index(drop=True)
-    results_df = pd.concat([results_df, obs_subset], axis=1)
 
-    return results_df
+
+    return sample_df
 
 
 def calculate_distance_to_nearest_window(
@@ -195,7 +196,8 @@ def calculate_distance_to_nearest_window(
 
 def summarize_coverage(
     coverage_df: pd.DataFrame,
-    intensity_col: Optional[str] = None
+    intensity_col: Optional[str] = None,
+    other_cols: Optional[List[str]] = None
 ) -> Dict[str, float]:
     """
     Generate summary statistics for DIA window coverage.
@@ -206,6 +208,8 @@ def summarize_coverage(
         Output from analyze_sample_coverage
     intensity_col : str, optional
         Name of intensity column in coverage_df for weighted statistics
+    other_cols : List[str], optional
+        Additional columns in coverage_df to include in the summary
 
     Returns:
     --------
@@ -227,6 +231,17 @@ def summarize_coverage(
         'uncovered_precursors': int(uncovered),
         'coverage_rate': (covered / total * 100) if total > 0 else 0.0
     }
+
+    if other_cols:
+        for c in other_cols:
+            temp = coverage_df.groupby(c).agg({'in_window': 'count', c: 'count'})
+
+            print(temp)
+
+            # summary[c] = {'total_precursors': total,
+            #               'covered_precursors': int(covered),
+            #                 'uncovered_precursors': int(uncovered),
+            #                 'coverage_rate': (covered / total * 100) if total > 0 else 0.0}
 
     # Add weighted coverage if intensity column is provided
     if intensity_col is not None and intensity_col in coverage_df.columns:

@@ -1,8 +1,17 @@
 import pandas as pd
 
-def map_lcms_methods(collection, sequence, existing='fillna', join_on=None):
+def map_lcms_methods(collection, 
+                     sequence, 
+                     existing='fillna', 
+                     join_on=None):
     """In place function to map LCMS methods to DiannCollection from sequence csv file"""
-    df = pd.read_csv(sequence)
+    if isinstance(sequence, list):
+        df_collection = []
+        for i in sequence:
+            df_collection.append(pd.read_csv(i))
+        df = pd.concat(df_collection, ignore_index=True)
+    else:
+        df = pd.read_csv(sequence)
     df['lc meth'] = df['Instrument Method'].str.extract(r'.+\\(.+)$')
     df['sample'] = df['Result Path'].str.extract(r'.+\\(.+)\.d+')
     df['ms meth'] = df['MS Method'].str.extract(r'.+\\(.+?)(?:\.proteoscape)*\.m')

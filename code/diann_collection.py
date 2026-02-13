@@ -290,8 +290,8 @@ class DiannCollection:
         level_samples: Dict[str, List[ad.AnnData]] = {level: [] for level in levels}
 
         # Load each results file at each level
-        for sample_name, results_path in results_files:
-            self._log(f"\nLoading {sample_name}")
+        for uuid, results_path in results_files:
+            self._log(f"\nLoading {uuid}")
 
             # Check which levels are available FIRST (more efficient - only reads header)
             available_levels = self.loader.check_available_levels(
@@ -313,38 +313,33 @@ class DiannCollection:
                     self._log(f"  Loading {level} level...")
 
                         # Load with strict=False to be permissive
-                    
-                    adata = self.loader.load_to_adata(
+                    df = self.loader.load_to_df(
                             str(results_path),
                             level=level,
                             sections=sections,
                             strict=False,
                             search_type=search_type
-                        )
+                    )
 
                     # # Add sample UUID/name to var (sample-level metadata, not obs)
                     if search_type == 'bps':
-                        adata.var['UUID'] = sample_name
-
-                    # # Add search type to var
-                    # adata.var['search_type'] = search_type
+                        df['UUID'] = uuid
 
                     # # Add to temporary list for concatenation
-                    level_samples[level].append(adata)
+                    level_samples[level].append(df)
 
                         # Print AnnData summary
-                    self._log(f"    ✓ {level}: {adata.shape}")
-                    self._log(f"\n{adata}\n")
+                    self._log(f"    ✓ {level}: {df.shape}")
+                    self._log(f"\n{df}\n")
 
                 except Exception as e:
                     # Handle errors during loading
                     if not strict:
                         self._log(f"⚠ Could not load {level} level: \n{e}")
                     else:
-                        self._log(f"Error loading {sample_name} at {level} level: {e}")
+                        self._log(f"Error loading {uuid} at {level} level: {e}")
                         break
                     continue
-
         # return level_samples
         # Concatenate samples for each level
         self._log("\nCombining samples across levels...")
@@ -352,17 +347,16 @@ class DiannCollection:
             if level_samples[level]:  # If we have any samples for this level
                 self._log(f"  Combining {len(level_samples[level])} samples for {level} level...")
 
-                # Concatenate all new samples for this level
-                if len(level_samples[level]) == 1:
-                    combined = level_samples[level][0]
-                else:
-                    combined = ad.concat(level_samples[level],
-                        axis=1,  # Concatenate along var (columns/samples) axis
-                        join='outer',
-                        merge='first'  # Keep first value for non-aligned obs metadata
+                concat_df = pd.concat(level_samples[level], axis=0, ignore_index=True)
+                adata = self.loader.load_to_adata(
+                            concat_df,
+                            level=level,
+                            sections=sections,
+                            strict=False,
+                            search_type=search_type
                     )
-                self._log(f"Merged obs DataFrame:\n{obs_merged}")
 
+                # TODO: concat with exisitng data
                 # If level already exists in collection, concatenate with existing data
                 if level in self.data:
                     self._log(f"    Concatenating with existing {level} data...")
@@ -375,7 +369,7 @@ class DiannCollection:
                         merge='first'  # Keep first value for non-aligned obs metadata
                     )
                 
-                self.data[level] = combined
+                self.data[level] = adata
                 self._log(f"    ✓ Added {level} with shape: {self.data[level].shape}")
 
         self._log(f"\n✓ Added {len(results_files)} samples to collection")

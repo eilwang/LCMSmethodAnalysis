@@ -280,22 +280,21 @@ class DiannLoader:
     
     def load_to_adata(
         self,
-        filepath: str,
+        data: str | pd.DataFrame,
         level: str,
         sections: Optional[List[str]] = None,
         strict: bool = False,
         output_path: Optional[str] = None,
         mk_dir: bool = True,
         search_type: str = 'bps',
-        df: Optional[pd.DataFrame] = None
     ) -> ad.AnnData:
         """
         Load DIA-NN data with column selection based on level into an AnnData object.
 
         Parameters:
         -----------
-        filepath : str
-            Path to DIA-NN report file
+        data : str | pd.DataFrame
+            Path to DIA-NN report file or a DataFrame
         level : str
             Analysis level (precursor, protein, gene)
         sections : List[str], optional
@@ -312,16 +311,19 @@ class DiannLoader:
         anndata.AnnData
             AnnData object with selected columns
         """
-
-        if df is None:
+        if isinstance(data, str):
             df = self.load_to_df(
-                filepath,
-                level,
-                sections,
-                strict, 
-                search_type=search_type
+                    data,
+                    level,
+                    sections,
+                    strict, 
+                    search_type=search_type
             )
-
+        elif isinstance(data, pd.DataFrame):
+            df = data
+        else:
+            raise ValueError(f"Data must be either a file path (str) or pandas DataFrame, got {type(data)}")
+            
         # Create AnnData object
         level_config = self.config['levels'][level]
 
@@ -356,14 +358,11 @@ class DiannLoader:
 
         var += ['search_type', 'hystar_index']
 
-        # Try each quantification column until one works
-        pivot_df = None
-
         logger.info(f"Using '{x}' as X layer")
-        pivot_df = df.pivot(index=obs,
-                                      columns=var,
-                                      values=x)
-
+        pivot_df = df.pivot(index=obs_name, # index only on obs_name for best chance at unqiueness
+                            columns=var,
+                            values=x)
+        
         # Convert MultiIndex columns to var DataFrame
         if isinstance(pivot_df.columns, pd.MultiIndex):
             # MultiIndex case: convert to DataFrame with column names from var list
@@ -372,12 +371,19 @@ class DiannLoader:
         else:
             # Single index case
             var_df = pivot_df.columns.to_frame(index=False, name=var_name)
+        
+        obs_cols = df.groupby(obs_name).agg(lambda x: ';'.join(list(set(';'.join(x.astype(str)).split(';'))))).reset_index(drop=True)
 
         adata = ad.AnnData(X = pivot_df.values,
                    obs = pivot_df.index.to_frame().reset_index(drop=True),
                    var = var_df.reset_index(drop=True))
         
-        adata.obs_names = adata.obs[obs_name].astype(str)
+        # adding in other obs
+        # keeping track of things joined together
+        
+
+        adata.obs_names = adata.obs[obs_name].astype(str).tolist()
+        adata.var_names = adata.var[var_name].astype(str).tolist()
 
         # Then make unique if needed using anndata's built-in method
         if not adata.obs_names.is_unique:
@@ -393,22 +399,25 @@ class DiannLoader:
                 logger.info("Obs names made unique using anndata method.")
 
         # Explicitly convert var_names to string to avoid anndata warning
-        adata.var_names = adata.var[var_name].astype(str)
 
         layers = df.columns[~df.columns.isin(var + obs)]
 
         for l in layers:
-            pivot_df = df.pivot(index=obs,
-                                          columns=var_name,
-                                          values=l)
+            pivot_df = df.pivot(index=obs_name,
+                                columns=var_name,
+                                values=l)
             
             #reindex to make sure everything is in the same order
             pivot_df.reindex(index=adata.obs_names,
-                                               columns=adata.var_names,
-                                               fill_value=np.nan)
+                             columns=adata.var_names,
+                             fill_value=np.nan)
 
             adata.layers[l] = pivot_df.values
+        
+        obs_cols.reindex(index=adata.obs_names, fill_value=np.nan)
 
+        adata.obs = obs_cols
+    
         # TODO: make it possible to save to h5ad
         # if output_path:
         #     output_dir = os.path.dirname(output_path)
