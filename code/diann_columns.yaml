@@ -10,13 +10,14 @@ levels:
       - Modified.Sequence
       - Stripped.Sequence
       - Precursor.Charge
+      - Lib.Index
+    non_unique_obs:
       - Protein.Group # parsimony protein group
       - Protein.Ids
       - Protein.Names
       - Genes
       - All Mapped Proteins
       - All Mapped Genes
-      - Lib.Index
     layers:
       - Precursor.Normalised
       - Precursor.Quantity

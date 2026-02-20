@@ -44,31 +44,31 @@ def elution_param(lccollection, samplecollection, sample, dead_volume=None):
 
   return gradient
 
-def get_sample(sample_collection, sample={}):
+# def get_sample(sample_collection, sample={}):
   
 
-def plot_precursor_lc(lccollection, bpscollection, sample=None, sample_idx=None, ax=None, figsize=(10, 6)):
-  fig, ax = plt.subplots(figsize=(10,6))
-  ax2 = ax.twinx()
-  ax3 = ax.twinx()
-  ax4 = ax2.twinx()
+# def plot_precursor_lc(lccollection, bpscollection, sample=None, sample_idx=None, ax=None, figsize=(10, 6)):
+#   fig, ax = plt.subplots(figsize=(10,6))
+#   ax2 = ax.twinx()
+#   ax3 = ax.twinx()
+#   ax4 = ax2.twinx()
 
-  #precursor RT distribution
-  sns.scatterplot(x = test[:, test.var['hystar_index'].isin(['14648'])].layers['RT'].flatten(),
-                  y= test[:, test.var['hystar_index'].isin(['14648'])].layers['RT'].flatten() - test[:, test.var['hystar_index'].isin(['14649'])].layers['RT'].flatten(),
-                  s=2,
-                  alpha=0.25,
-                  edgecolor=None,
-                  ax=ax)
-  ax.set_ylabel('RT Difference (Low flow - High Flow) in min')
-  sns.histplot(test[:, test.var['hystar_index'].isin(['14648'])].layers['RT'].flatten(), ax=ax2, alpha=0.3, edgecolor=None, color='grey')
-  sns.histplot(test[:, test.var['hystar_index'].isin(['14649'])].layers['RT'].flatten(), ax=ax2, alpha=0.3, edgecolor=None, color='blue')
+#   #precursor RT distribution
+#   sns.scatterplot(x = test[:, test.var['hystar_index'].isin(['14648'])].layers['RT'].flatten(),
+#                   y= test[:, test.var['hystar_index'].isin(['14648'])].layers['RT'].flatten() - test[:, test.var['hystar_index'].isin(['14649'])].layers['RT'].flatten(),
+#                   s=2,
+#                   alpha=0.25,
+#                   edgecolor=None,
+#                   ax=ax)
+#   ax.set_ylabel('RT Difference (Low flow - High Flow) in min')
+#   sns.histplot(test[:, test.var['hystar_index'].isin(['14648'])].layers['RT'].flatten(), ax=ax2, alpha=0.3, edgecolor=None, color='grey')
+#   sns.histplot(test[:, test.var['hystar_index'].isin(['14649'])].layers['RT'].flatten(), ax=ax2, alpha=0.3, edgecolor=None, color='blue')
 
 
-  lccollection.plot_gradients(['18p6m200nlv30'], y_cols = ['Neo.PumpModule.Pump.Flow.Nominal [µl/min]'], ax = ax3)
-  lccollection.plot_gradients(['18p6m200nlv30'], y_cols = ['Neo.PumpModule.Pump.%B.Value [%]'], ax = ax4)
+#   lccollection.plot_gradients(['18p6m200nlv30'], y_cols = ['Neo.PumpModule.Pump.Flow.Nominal [µl/min]'], ax = ax3)
+#   lccollection.plot_gradients(['18p6m200nlv30'], y_cols = ['Neo.PumpModule.Pump.%B.Value [%]'], ax = ax4)
 
-  sns.lineplot(data = df, x = 'Actual Time to Elute Nominal %B (min)', y='Neo.PumpModule.Pump.%B.Value [%]', ax=ax4, markers='o')
-  sns.lineplot(data = df, x = 'time [min]', y='Neo.PumpModule.Pump.%B.Value [%]', ax=ax4, color='orange', markers='o')
+#   sns.lineplot(data = df, x = 'Actual Time to Elute Nominal %B (min)', y='Neo.PumpModule.Pump.%B.Value [%]', ax=ax4, markers='o')
+#   sns.lineplot(data = df, x = 'time [min]', y='Neo.PumpModule.Pump.%B.Value [%]', ax=ax4, color='orange', markers='o')
 
-  return df 
+#   return df 

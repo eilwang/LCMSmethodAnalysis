@@ -277,16 +277,42 @@ class DiannLoader:
 
         result['search_type'] = search_type
         return result # type: ignore
+
+    def get_valid_cols(self, df, level_config, level):
+        """Helper method to get valid columns for a given level."""
+        cols = level_config.get(level, [])
+        if isinstance(cols, str):
+            # Single string value - wrap in list
+            cols = [cols]
+        elif not isinstance(cols, list):
+            # Some other type - convert to list
+            cols = [cols]
+        
+        cols = [c for c in cols if c in df.columns]
+        
+        if level == 'layers':
+            cols_without_nan = ~df.loc[:, cols].isna().all()
+        else:
+            cols_without_nan = ~df.loc[:, cols].isna().any()
+
+        valid_cols = [col for col, is_valid in zip(cols, cols_without_nan) if is_valid]
+
+        if len(valid_cols) == 0:
+            raise ValueError(f"No {level} columns found without NaN values. Tried: {cols}")
+
+        main_col = valid_cols[0]
+
+        return valid_cols, main_col
     
     def load_to_adata(
         self,
         data: str | pd.DataFrame,
         level: str,
+        search_type: str = 'bps',
         sections: Optional[List[str]] = None,
         strict: bool = False,
         output_path: Optional[str] = None,
-        mk_dir: bool = True,
-        search_type: str = 'bps',
+        mk_dir: bool = True
     ) -> ad.AnnData:
         """
         Load DIA-NN data with column selection based on level into an AnnData object.
@@ -300,11 +326,12 @@ class DiannLoader:
         sections : List[str], optional
             Specific sections to include (var, obs, pr_obs, x, mod_obs, optional)
             If None, includes all sections
-        include_optional : bool
-            If True, include optional columns if they exist
-        strictly_uniquevar : bool
-            If True, raise error designated var names are not all unique
-            If False, make var names unique by appending indices and raise warning
+        strict : bool
+            If True, raise error if expected columns are missing
+        output_path : str, optional
+            Path to save the AnnData object
+        mk_dir : bool
+            If True, create output directory if it doesn't exist
 
         Returns:
         --------
@@ -327,39 +354,15 @@ class DiannLoader:
         # Create AnnData object
         level_config = self.config['levels'][level]
 
-        def get_valid_cols(df, level):
-            cols = level_config.get(level, [])
-            if isinstance(cols, str):
-                # Single string value - wrap in list
-                cols = [cols]
-            elif not isinstance(cols, list):
-                # Some other type - convert to list
-                cols = [cols]
-            
-            cols = [c for c in cols if c in df.columns]
-            
-            if level == 'layers':
-                cols_without_nan = ~df.loc[:, cols].isna().all()
-            else:
-                cols_without_nan = ~df.loc[:, cols].isna().any()
-
-            valid_cols = [col for col, is_valid in zip(cols, cols_without_nan) if is_valid]
-
-            if len(valid_cols) == 0:
-                raise ValueError(f"No {level} columns found without NaN values. Tried: {cols}")
-
-            main_col = valid_cols[0]
-
-            return valid_cols, main_col
-    
-        var, var_name = get_valid_cols(df, 'var')
-        obs, obs_name = get_valid_cols(df, 'obs')
-        layers, x = get_valid_cols(df, 'layers')
-
+        var, var_name = self.get_valid_cols(df, level_config, 'var')
         var += ['search_type', 'hystar_index']
 
+        obs, obs_name = self.get_valid_cols(df, level_config, 'obs')
+        layers, x = self.get_valid_cols(df, level_config, 'layers')
+
         logger.info(f"Using '{x}' as X layer")
-        pivot_df = df.pivot(index=obs_name, # index only on obs_name for best chance at unqiueness
+
+        pivot_df = df.pivot(index=obs_name, # index only on obs_name for best chance at uniqueness
                             columns=var,
                             values=x)
         
@@ -371,17 +374,14 @@ class DiannLoader:
         else:
             # Single index case
             var_df = pivot_df.columns.to_frame(index=False, name=var_name)
-        
-        obs_cols = df.groupby(obs_name).agg(lambda x: ';'.join(list(set(';'.join(x.astype(str)).split(';'))))).reset_index(drop=True)
 
-        adata = ad.AnnData(X = pivot_df.values,
-                   obs = pivot_df.index.to_frame().reset_index(drop=True),
-                   var = var_df.reset_index(drop=True))
+        adata = ad.AnnData(X=pivot_df.values,
+                          obs=pivot_df.index.to_frame().reset_index(drop=True),
+                          var=var_df.reset_index(drop=True))
         
         # adding in other obs
         # keeping track of things joined together
         
-
         adata.obs_names = adata.obs[obs_name].astype(str).tolist()
         adata.var_names = adata.var[var_name].astype(str).tolist()
 
@@ -400,23 +400,23 @@ class DiannLoader:
 
         # Explicitly convert var_names to string to avoid anndata warning
 
-        layers = df.columns[~df.columns.isin(var + obs)]
-
         for l in layers:
             pivot_df = df.pivot(index=obs_name,
                                 columns=var_name,
                                 values=l)
             
-            #reindex to make sure everything is in the same order
-            pivot_df.reindex(index=adata.obs_names,
-                             columns=adata.var_names,
-                             fill_value=np.nan)
+            # reindex to make sure everything is in the same order
+            pivot_df = pivot_df.reindex(index=adata.obs_names,
+                                        columns=adata.var_names,
+                                        fill_value=np.nan)
 
             adata.layers[l] = pivot_df.values
         
-        obs_cols.reindex(index=adata.obs_names, fill_value=np.nan)
-
-        adata.obs = obs_cols
+        obs_df = df.loc[:, obs]
+        obs_df = obs_df.groupby(obs_name).agg(lambda x: ';'.join(list(set(';'.join(x.astype(str)).split(';')))))
+        obs_df = obs_df.reindex(index=adata.obs_names, fill_value=np.nan)
+        
+        adata.obs = obs_df
     
         # TODO: make it possible to save to h5ad
         # if output_path:
