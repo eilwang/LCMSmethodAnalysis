@@ -119,6 +119,52 @@ class DiannCollection:
             self.log_handle.close()
             self.log_handle = None
 
+    def _get_search_path(self, 
+                        path: str) -> Path:
+        
+        path_obj = Path(path)
+
+        # Check if path is a zip file or directory
+        if path_obj.is_file():
+            # check if zip folder
+            if path_obj.suffix == '.tsv':
+                search_path = path_obj
+            elif path_obj.suffix == '.zip':
+            # It's a zip file - extract it first
+                temp_dir = tempfile.mkdtemp(prefix='diann_folder_')
+                self.temp_dirs.append(temp_dir)
+
+                try:
+                    with zipfile.ZipFile(path_obj, 'r') as zf:
+                        zf.extractall(temp_dir)
+                    search_path = Path(temp_dir)
+
+                    # Check if extraction created a single wrapper folder
+                    # If so, start searching from that folder instead
+                    contents = list(search_path.iterdir())
+                    if len(contents) == 1 and contents[0].is_dir():
+                        # Common case: zip creates a single top-level folder
+                        # e.g., archive.zip -> temp_dir/processing-run/
+                        search_path = contents[0]
+
+                except zipfile.BadZipFile:
+                    raise ValueError(f"Invalid zip file: {path}")
+
+        elif path_obj.is_dir():
+            # It's a directory - use it directly
+            search_path = path_obj
+
+        else:
+            raise ValueError(
+                f"Path must be a directory or zip file: {path}\n"
+                f"Exists: {path_obj.exists()}, "
+                f"Is file: {path_obj.is_file()}, "
+                f"Is dir: {path_obj.is_dir()}"
+            )
+
+        # Find all results files based on search type
+        return search_path
+
     def _find_results_files(
         self,
         search_dir: Path,
@@ -203,10 +249,12 @@ class DiannCollection:
             raise ValueError(f"Unknown search_type: {search_type}. Must be 'bps' or 'fragpipe'")
 
         return results_files
+    
 
-    def add_from_folder(
+
+    def add_searches(
         self,
-        folder_path: str,
+        path: str | list,
         levels: Optional[List[str]] = None,
         sections: Optional[List[str]] = None,
         strict: bool = False,
@@ -217,8 +265,8 @@ class DiannCollection:
 
         Parameters:
         -----------
-        folder_path : str
-            Path to folder or zip file containing DIA-NN search results
+        folder_path : str | list
+            Path to folder or zip file containing DIA-NN search results, or a list of such paths    
         levels : List[str], optional
             Specific levels to load (precursor, protein, gene)
             If None, loads all available levels
@@ -231,44 +279,13 @@ class DiannCollection:
             - 'bps': tims-diann.result.zip/result.tsv (default)
             - 'fragpipe': sample/diann-output/report.tsv
         """
-        folder_path_obj = Path(folder_path)
-
-        # Check if path is a zip file or directory
-        if folder_path_obj.is_file() and folder_path_obj.suffix == '.zip':
-            # It's a zip file - extract it first
-            temp_dir = tempfile.mkdtemp(prefix='diann_folder_')
-            self.temp_dirs.append(temp_dir)
-
-            try:
-                with zipfile.ZipFile(folder_path, 'r') as zf:
-                    zf.extractall(temp_dir)
-                search_path = Path(temp_dir)
-
-                # Check if extraction created a single wrapper folder
-                # If so, start searching from that folder instead
-                contents = list(search_path.iterdir())
-                if len(contents) == 1 and contents[0].is_dir():
-                    # Common case: zip creates a single top-level folder
-                    # e.g., archive.zip -> temp_dir/processing-run/
-                    search_path = contents[0]
-
-            except zipfile.BadZipFile:
-                raise ValueError(f"Invalid zip file: {folder_path}")
-
-        elif folder_path_obj.is_dir():
-            # It's a directory - use it directly
-            search_path = folder_path_obj
-
-        else:
-            raise ValueError(
-                f"Path must be a directory or zip file: {folder_path}\n"
-                f"Exists: {folder_path_obj.exists()}, "
-                f"Is file: {folder_path_obj.is_file()}, "
-                f"Is dir: {folder_path_obj.is_dir()}"
-            )
-
-        # Find all results files based on search type
-        results_files = self._find_results_files(search_path, search_type=search_type)
+        # Convert single path to list for uniform handling
+        paths = path if isinstance(path, list) else [path]
+        
+        results_files = []
+        for p in paths:
+            search_path = self._get_search_path(p)
+            results_files.extend(self._find_results_files(search_path, search_type=search_type))
 
         if not results_files:
             expected_structure = {
@@ -276,7 +293,7 @@ class DiannCollection:
                 'fragpipe': 'sample/diann-output/report.tsv'
             }
             raise FileNotFoundError(
-                f"No results files found in {folder_path} for search_type='{search_type}'. "
+                f"No results files found in {path} for search_type='{search_type}'. "
                 f"Expected structure: {expected_structure[search_type]}"
             )
 
@@ -373,184 +390,6 @@ class DiannCollection:
                 self._log(f"    ✓ Added {level} with shape: {self.data[level].shape}")
 
         self._log(f"\n✓ Added {len(results_files)} samples to collection")
-
-    def add_single_search(
-        self,
-        search_path: str,
-        sample_name: Optional[str] = None,
-        levels: Optional[List[str]] = None,
-        sections: Optional[List[str]] = None,
-        strict: bool = False,
-        search_type: str = 'bps'
-    ):
-        """
-        Load DIA-NN results from a single search folder and add to collection.
-
-        Searches for tims-diann.result.zip or result.tsv/results.tsv in the folder
-        using the same logic as add_from_folder.
-
-        Parameters:
-        -----------
-        search_path : str
-            Path to search folder (will look for tims-diann.result.zip or result.tsv)
-            OR path to a .tsv file directly (for fragpipe search_type)
-        sample_name : str, optional
-            Name for this sample. If None, uses folder name or file stem
-        levels : List[str], optional
-            Specific levels to load (precursor, protein, gene)
-            If None, loads all available levels
-        sections : List[str], optional
-            Specific sections to include
-        strict : bool
-            If True, raise error if expected columns are missing
-        search_type : str
-            Type of search structure ('bps' or 'fragpipe')
-
-        Example:
-        --------
-        >>> collection = DiannCollection()
-        >>> collection.add_single_search("sample1_folder/", sample_name="sample1")
-        >>> collection.add_single_search("sample2_folder/", sample_name="sample2")
-        >>> # For FragPipe, can also provide direct path to .tsv file
-        >>> collection.add_single_search("results.tsv", search_type='fragpipe')
-        """
-        search_path_obj = Path(search_path)
-
-        if not search_path_obj.exists():
-            raise FileNotFoundError(f"Path not found: {search_path}")
-
-        # Check if path is directly a .tsv file
-        if search_path_obj.is_file() and search_path_obj.suffix == '.tsv':
-            # Direct .tsv file path provided
-            results_file_path = search_path_obj
-            detected_sample_name = search_path_obj.stem
-            self._log(f"Loading from direct .tsv file: {results_file_path.name}")
-        elif search_path_obj.is_dir():
-            # Directory path - search for results 
-            # Use _find_results_files to locate the results file
-            results_files = self._find_results_files(search_path_obj, search_type)
-
-            if len(results_files) == 0:
-                raise FileNotFoundError(
-                    f"No results files found in {search_path} for search_type='{search_type}'. "
-                    f"Expected structure for {search_type}."
-                )
-
-            if len(results_files) > 1:
-                warnings.warn(
-                    f"Found {len(results_files)} results files in {search_path}. "
-                    f"Will load only the first one: {results_files[0][0]}"
-                )
-
-            # Get the first (and should be only) result file
-            detected_sample_name, results_file_path = results_files[0]
-        else:
-            raise ValueError(f"Path must be a directory or .tsv file: {search_path}")
-
-        # Determine sample name
-        if sample_name is None:
-            sample_name = detected_sample_name  # Use the detected sample name from folder structure or file stem
-
-        # Determine which levels to load
-        if levels is None:
-            levels = list(self.loader.config['levels'].keys())
-
-        self._log(f"\nLoading {sample_name} from {results_file_path.name}...")
-
-        # Check which levels are available
-        available_levels = self.loader.check_available_levels(
-            str(results_file_path),
-            sections=sections
-        )
-
-        # Storage for loaded samples by level
-        level_samples: Dict[str, List[ad.AnnData]] = {level: [] for level in levels}
-
-        # Try to load each requested level
-        for level in levels:
-            level_info = available_levels.get(level, {})
-
-            # # Show warning about missing columns but still attempt to load
-            # if not level_info.get('available', False):
-            #     missing = level_info.get('missing_columns', [])
-            #     self._log(f"  ⚠ Note: {level} level missing some columns: {', '.join(missing[:3])}{'...' if len(missing) > 3 else ''}")
-
-            try:
-                self._log(f"  Loading {level} level...")
-
-                # Load with strict=False to be permissive
-                adata = self.loader.load_to_adata(
-                    str(results_file_path),
-                    level=level,
-                    sections=sections,
-                    strict=False,
-                    search_type=search_type
-                )
-
-                # Add sample UUID/name to var (sample-level metadata, not obs)
-                if search_type == 'bps':
-                    adata.var['UUID'] = sample_name
-                # Add to temporary list for potential concatenation
-                level_samples[level].append(adata)
-
-                # Log success
-                self._log(f"    ✓ {level}: {adata.shape}")
-
-            except Exception as e:
-                # Handle errors during loading
-                if not strict:
-                    self._log(f"    ⚠ Could not load {level} level: {type(e).__name__}")
-                else:
-                    raise
-
-        # Add or concatenate with existing data
-        self._log(f"\nAdding to collection...")
-        for level in levels:
-            if level_samples[level]:  # If we have any samples for this level
-                self._log(f"  Adding {level} level...")
-
-                # Concatenate all new samples for this level (should be 1 for single search)
-                if len(level_samples[level]) == 1:
-                    combined = level_samples[level][0]
-                else:
-                    combined = ad.concat(level_samples[level],
-                        axis=1,  # Concatenate along var (columns/samples) axis
-                        join='outer',
-                        # merge='unique'  # Keep first value for non-aligned obs metadata
-                    )
-                obs_cat = pd.concat([ad.obs for ad in level_samples[level]])
-
-                obs_merged = obs_cat.groupby(combined.obs_names.name).agg(lambda x: pd.Series(x).unique().tolist())
-                obs_merge = reduce(lambda left, right: pd.merge(left.obs, right.obs, on='key', how='outer'), level_samples[level])
-                self._log(f"Merged obs DataFrame:\n{obs_merge}")
-
-                # If level already exists in collection, concatenate with existing data
-                if level in self.data:
-                    self._log(f"    Concatenating with existing {level} data...")
-                    existing = self.data[level]
-
-                    obs_merge = pd.merge(existing.obs, obs_merge, on='key', how='outer')
-
-                    combined = ad.concat(
-                        [existing, combined],
-                        axis=1,  # Concatenate along var (columns/samples) axis
-                        join='outer',
-                        # merge='unique'  # Keep first value for non-aligned obs metadata
-                    )
-                original_index = combined.obs.index.copy()
-                obs_merge.reindex(original_index)
-
-                combined.obs = obs_merge
-
-                self.data[level] = combined
-                self._log(f"    ✓ Combined shape: {self.data[level].shape}")
-                # else:
-                #     # First time adding this level
-                    
-                #     self.data[level] = combined
-                #     self._log(f"    ✓ Added {level} with shape: {self.data[level].shape}")
-
-        self._log(f"\n✓ Added sample '{sample_name}' to collection")
 
     def get(self, level: str, sample: Optional[str] = None) -> ad.AnnData:
         """
