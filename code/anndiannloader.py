@@ -385,6 +385,7 @@ class DiannLoader:
 
 
         # Avoid unnecessary .tolist() conversions - AnnData handles Index objects directly
+        adata.obs_names = adata.obs[obs_name].astype(str).to_list()
         adata.var_names = adata.var[var_name].astype(str).to_list()
 
         # add rest of obs columns, if multiple values per obs_name, collapse into unique set separate by ;
