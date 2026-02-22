@@ -10,7 +10,7 @@ levels:
       - Modified.Sequence
       - Stripped.Sequence
       - Precursor.Charge
-      - Lib.Index
+      - Lib.Index #TODO: How to align if searching with different libraries? is there any real reason to try to keep this?
     non_unique_obs:
       - Protein.Group # parsimony protein group
       - Protein.Ids
