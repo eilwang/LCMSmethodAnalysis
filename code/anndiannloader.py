@@ -367,10 +367,7 @@ class DiannLoader:
         pivot_df = df.pivot(index=obs_name,
                             columns=var,
                             values=layers)
-        # pivot_df = df.pivot(index=obs_name, # index only on obs_name for best chance at uniqueness
-        #                     columns=var,
-        #                     values=x)
-        
+
         # # Convert MultiIndex columns to var DataFrame
         if isinstance(pivot_df.columns, pd.MultiIndex):
             # MultiIndex case: convert to DataFrame with column names from var list
@@ -392,19 +389,6 @@ class DiannLoader:
                            var=var_df.set_index(var_name),
                            layers = {metric: pivot_df.loc[:, metric].values for metric in layers}
         )
-        
-        # adding in other obs
-        # keeping track of things joined together
-
-
-        # Avoid unnecessary .tolist() conversions - AnnData handles Index objects directly
-        # adata.obs_names = adata.obs[obs_name].astype(str).to_list()
-        # adata.var_names = adata.var[var_name].astype(str).to_list()
-
-        # add rest of obs columns, if multiple values per obs_name, collapse into unique set separate by ;
-
-
-        # adata.obs_names = adata.obs[obs_name].astype(str).to_list()
 
         # Then make unique if needed using anndata's built-in method
         if not adata.obs_names.is_unique:
@@ -418,19 +402,6 @@ class DiannLoader:
                 # Use anndata's method to make unique
                 adata.obs_names_make_unique()
                 logger.info("Obs names made unique using anndata method.")
-
-        # Explicitly convert var_names to string to avoid anndata warning
-        # for l in layers:
-        #     pivot_df = df.pivot(index=obs_name,
-        #                         columns=var_name,
-        #                         values=l)
-            
-        #     # reindex to make sure everything is in the same order
-        #     pivot_df = pivot_df.reindex(index=adata.obs_names,
-        #                                 columns=adata.var_names,
-        #                                 fill_value=np.nan)
-
-        #     adata.layers[l] = pivot_df.values 
 
         # TODO: make it possible to save to h5ad
         # if output_path:
