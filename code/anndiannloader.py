@@ -363,39 +363,48 @@ class DiannLoader:
 
         logger.info(f"Using '{x}' as X layer")
 
-        pivot_df = df.pivot(index=obs_name, # index only on obs_name for best chance at uniqueness
+        #obs will not work properly if some aggregation is needed
+        pivot_df = df.pivot(index=obs_name,
                             columns=var,
-                            values=x)
+                            values=layers)
+        # pivot_df = df.pivot(index=obs_name, # index only on obs_name for best chance at uniqueness
+        #                     columns=var,
+        #                     values=x)
         
-        # Convert MultiIndex columns to var DataFrame
+        # # Convert MultiIndex columns to var DataFrame
         if isinstance(pivot_df.columns, pd.MultiIndex):
             # MultiIndex case: convert to DataFrame with column names from var list
-            var_df = pivot_df.columns.to_frame(index=False)
+            var_df = pivot_df.columns[pivot_df.columns.get_level_values(0) == x] # repeats for each layer
+            var_df = var_df.to_frame(index=False).drop(columns=0)
             var_df.columns = var  # Name the columns according to var list
         else:
             # Single index case
-            var_df = pivot_df.columns.to_frame(index=False, name=var_name)
+            var_df = pivot_df.columns.to_frame(index=False)
 
-        adata = ad.AnnData(X=pivot_df.values,
-                          obs=pivot_df.index.to_frame().reset_index(drop=True),
-                          var=var_df.reset_index(drop=True))
+        # handle obs separately since there is a chance for non-redundant values for some of the obs with the same obs_name
+        obs_df = df.loc[:, obs]
+        obs_df = obs_df.groupby(obs_name).agg(lambda x: ';'.join(list(set(';'.join(x.astype(str)).split(';')))))
+        obs_df = obs_df.reindex(index=pivot_df.index, fill_value=np.nan)
+        obs_df[obs_name] = obs_df.index
+
+        adata = ad.AnnData(X=pivot_df.loc[:, x].values,
+                           obs=obs_df,
+                           var=var_df.set_index(var_name),
+                           layers = {metric: pivot_df.loc[:, metric].values for metric in layers}
+        )
         
         # adding in other obs
         # keeping track of things joined together
 
 
         # Avoid unnecessary .tolist() conversions - AnnData handles Index objects directly
-        adata.obs_names = adata.obs[obs_name].astype(str).to_list()
-        adata.var_names = adata.var[var_name].astype(str).to_list()
+        # adata.obs_names = adata.obs[obs_name].astype(str).to_list()
+        # adata.var_names = adata.var[var_name].astype(str).to_list()
 
         # add rest of obs columns, if multiple values per obs_name, collapse into unique set separate by ;
-        obs_df = df.loc[:, obs]
-        obs_df = obs_df.groupby(obs_name).agg(lambda x: ';'.join(list(set(';'.join(x.astype(str)).split(';')))))
-        obs_df = obs_df.reindex(index=adata.obs[obs_name], fill_value=np.nan)
-        obs_df[obs_name] = obs_df.index
-        adata.obs = obs_df
 
-        adata.obs_names = adata.obs[obs_name].astype(str).to_list()
+
+        # adata.obs_names = adata.obs[obs_name].astype(str).to_list()
 
         # Then make unique if needed using anndata's built-in method
         if not adata.obs_names.is_unique:
@@ -411,17 +420,17 @@ class DiannLoader:
                 logger.info("Obs names made unique using anndata method.")
 
         # Explicitly convert var_names to string to avoid anndata warning
-        for l in layers:
-            pivot_df = df.pivot(index=obs_name,
-                                columns=var_name,
-                                values=l)
+        # for l in layers:
+        #     pivot_df = df.pivot(index=obs_name,
+        #                         columns=var_name,
+        #                         values=l)
             
-            # reindex to make sure everything is in the same order
-            pivot_df = pivot_df.reindex(index=adata.obs_names,
-                                        columns=adata.var_names,
-                                        fill_value=np.nan)
+        #     # reindex to make sure everything is in the same order
+        #     pivot_df = pivot_df.reindex(index=adata.obs_names,
+        #                                 columns=adata.var_names,
+        #                                 fill_value=np.nan)
 
-            adata.layers[l] = pivot_df.values 
+        #     adata.layers[l] = pivot_df.values 
 
         # TODO: make it possible to save to h5ad
         # if output_path:
