@@ -10,6 +10,7 @@ Stores searches as combined AnnData objects by level for efficient access and ma
 from functools import reduce
 import pandas as pd
 import anndata as ad
+import numpy as np
 import zipfile
 import tempfile
 import shutil
@@ -360,11 +361,13 @@ class DiannCollection:
         # return level_samples
         # Concatenate samples for each level
         self._log("\nCombining samples across levels...")
+
         for level in levels:
             if level_samples[level]:  # If we have any samples for this level
                 self._log(f"  Combining {len(level_samples[level])} samples for {level} level...")
 
                 concat_df = pd.concat(level_samples[level], axis=0, ignore_index=True)
+                
                 adata = self.loader.load_to_adata(
                             concat_df,
                             level=level,
@@ -372,19 +375,29 @@ class DiannCollection:
                             strict=False,
                             search_type=search_type
                     )
+                print(adata.obs.columns)
 
-                # TODO: concat with exisitng data
                 # If level already exists in collection, concatenate with existing data
                 if level in self.data:
                     self._log(f"    Concatenating with existing {level} data...")
                     existing = self.data[level]
 
-                    combined = ad.concat(
-                        [existing, combined],
+                    # adata concat with merge "first" fills in na values in the obs when concating the var
+                    # need to perform separate obs merge to ensure we keep all obs metadata from both existing and new data, and then reassign to adata.obs after the var concat
+
+                    # merged_obs = existing.obs.merge(adata.obs, how='outer', left_index=True, right_index=True)
+                    merged_obs = pd.concat([existing.obs, adata.obs], axis=0).drop_duplicates()
+
+                    adata = ad.concat(
+                        [existing, adata],
                         axis=1,  # Concatenate along var (columns/samples) axis
                         join='outer',
-                        merge='first'  # Keep first value for non-aligned obs metadata
+                        merge=None  # Keep first value for non-aligned obs metadata
                     )
+
+                    merged_obs.reindex(index=adata.obs_names, fill_value=np.nan)
+                    adata.obs = merged_obs
+                    adata.obs_names = merged_obs.index
                 
                 self.data[level] = adata
                 self._log(f"    ✓ Added {level} with shape: {self.data[level].shape}")

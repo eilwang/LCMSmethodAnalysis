@@ -358,6 +358,8 @@ class DiannLoader:
         var += ['search_type', 'hystar_index']
 
         obs, obs_name = self.get_valid_cols(df, level_config, 'obs')
+
+        print(obs)
         layers, x = self.get_valid_cols(df, level_config, 'layers')
 
         logger.info(f"Using '{x}' as X layer")
@@ -381,9 +383,37 @@ class DiannLoader:
         
         # adding in other obs
         # keeping track of things joined together
-        
-        adata.obs_names = adata.obs[obs_name].astype(str).tolist()
-        adata.var_names = adata.var[var_name].astype(str).tolist()
+
+        obs_df = df.loc[:, obs]
+
+        # Avoid unnecessary .tolist() conversions - AnnData handles Index objects directly
+        adata.obs_names = adata.obs[obs_name].astype(str)
+        adata.var_names = adata.var[var_name].astype(str)
+
+        # Optimized aggregation function for better performance
+        def efficient_dedupe(x):
+            """Efficiently deduplicate and join values with ';' separator."""
+            if x.isna().all():
+                return np.nan
+            
+            # Convert to string, filter out NaN values, get unique, sort for consistency
+            str_vals = x.astype(str)
+            non_nan_vals = str_vals[str_vals != 'nan']
+            
+            if len(non_nan_vals) == 0:
+                return np.nan
+            
+            unique_vals = non_nan_vals.drop_duplicates()
+            if len(unique_vals) == 1:
+                return unique_vals.iloc[0]
+            else:
+                return ';'.join(sorted(unique_vals))
+
+        # add rest of obs columns, if multiple values per obs_name, collapse into unique set separate by ;
+        obs_df = obs_df.groupby(obs_name).agg(efficient_dedupe)
+        obs_df = obs_df.reindex(index=adata.obs_names, fill_value=np.nan)
+        obs_df[obs_name] = obs_df.index
+        adata.obs = obs_df
 
         # Then make unique if needed using anndata's built-in method
         if not adata.obs_names.is_unique:
@@ -399,7 +429,6 @@ class DiannLoader:
                 logger.info("Obs names made unique using anndata method.")
 
         # Explicitly convert var_names to string to avoid anndata warning
-
         for l in layers:
             pivot_df = df.pivot(index=obs_name,
                                 columns=var_name,
@@ -410,14 +439,8 @@ class DiannLoader:
                                         columns=adata.var_names,
                                         fill_value=np.nan)
 
-            adata.layers[l] = pivot_df.values
-        
-        obs_df = df.loc[:, obs]
-        obs_df = obs_df.groupby(obs_name).agg(lambda x: ';'.join(list(set(';'.join(x.astype(str)).split(';')))))
-        obs_df = obs_df.reindex(index=adata.obs_names, fill_value=np.nan)
-        
-        adata.obs = obs_df
-    
+            adata.layers[l] = pivot_df.values 
+
         # TODO: make it possible to save to h5ad
         # if output_path:
         #     output_dir = os.path.dirname(output_path)
@@ -429,7 +452,6 @@ class DiannLoader:
         #             raise FileNotFoundError(f"Directory does not exist: {output_dir}. Set mk_dir=True to create it.")
         #     adata.write_h5ad(f'{output_path}/{level}_report.h5ad')
         #     print(f"AnnData object saved to {output_path}/{level}_report.h5ad")
-            
         return adata
 
 
