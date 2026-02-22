@@ -359,7 +359,6 @@ class DiannLoader:
 
         obs, obs_name = self.get_valid_cols(df, level_config, 'obs')
 
-        print(obs)
         layers, x = self.get_valid_cols(df, level_config, 'layers')
 
         logger.info(f"Using '{x}' as X layer")
@@ -384,11 +383,10 @@ class DiannLoader:
         # adding in other obs
         # keeping track of things joined together
 
-        obs_df = df.loc[:, obs]
 
         # Avoid unnecessary .tolist() conversions - AnnData handles Index objects directly
-        adata.obs_names = adata.obs[obs_name].astype(str)
-        adata.var_names = adata.var[var_name].astype(str)
+        adata.obs_names = adata.obs[obs_name].astype(str).to_list()
+        adata.var_names = adata.var[var_name].astype(str).to_list()
 
         # Optimized aggregation function for better performance
         def efficient_dedupe(x):
@@ -410,10 +408,12 @@ class DiannLoader:
                 return ';'.join(sorted(unique_vals))
 
         # add rest of obs columns, if multiple values per obs_name, collapse into unique set separate by ;
-        obs_df = obs_df.groupby(obs_name).agg(efficient_dedupe)
+        obs_df = df.loc[:, obs]
+        obs_df = obs_df.groupby(obs_name).agg(lambda x: ';'.join(list(set(';'.join(x.astype(str)).split(';')))))
         obs_df = obs_df.reindex(index=adata.obs_names, fill_value=np.nan)
-        obs_df[obs_name] = obs_df.index
         adata.obs = obs_df
+        obs_df[obs_name] = obs_df.index
+        
 
         # Then make unique if needed using anndata's built-in method
         if not adata.obs_names.is_unique:

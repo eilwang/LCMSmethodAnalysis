@@ -375,7 +375,6 @@ class DiannCollection:
                             strict=False,
                             search_type=search_type
                     )
-                print(adata.obs.columns)
 
                 # If level already exists in collection, concatenate with existing data
                 if level in self.data:
