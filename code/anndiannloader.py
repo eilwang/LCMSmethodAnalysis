@@ -385,35 +385,16 @@ class DiannLoader:
 
 
         # Avoid unnecessary .tolist() conversions - AnnData handles Index objects directly
-        adata.obs_names = adata.obs[obs_name].astype(str).to_list()
         adata.var_names = adata.var[var_name].astype(str).to_list()
-
-        # Optimized aggregation function for better performance
-        def efficient_dedupe(x):
-            """Efficiently deduplicate and join values with ';' separator."""
-            if x.isna().all():
-                return np.nan
-            
-            # Convert to string, filter out NaN values, get unique, sort for consistency
-            str_vals = x.astype(str)
-            non_nan_vals = str_vals[str_vals != 'nan']
-            
-            if len(non_nan_vals) == 0:
-                return np.nan
-            
-            unique_vals = non_nan_vals.drop_duplicates()
-            if len(unique_vals) == 1:
-                return unique_vals.iloc[0]
-            else:
-                return ';'.join(sorted(unique_vals))
 
         # add rest of obs columns, if multiple values per obs_name, collapse into unique set separate by ;
         obs_df = df.loc[:, obs]
         obs_df = obs_df.groupby(obs_name).agg(lambda x: ';'.join(list(set(';'.join(x.astype(str)).split(';')))))
-        obs_df = obs_df.reindex(index=adata.obs_names, fill_value=np.nan)
-        adata.obs = obs_df
+        obs_df = obs_df.reindex(index=adata.obs[obs_name], fill_value=np.nan)
         obs_df[obs_name] = obs_df.index
-        
+        adata.obs = obs_df
+
+        adata.obs_names = adata.obs[obs_name].astype(str).to_list()
 
         # Then make unique if needed using anndata's built-in method
         if not adata.obs_names.is_unique:
