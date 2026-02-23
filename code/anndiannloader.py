@@ -386,7 +386,7 @@ class DiannLoader:
 
         adata = ad.AnnData(X=pivot_df.loc[:, x].values,
                            obs=obs_df,
-                           var=var_df.set_index(var_name),
+                           var=var_df.set_index(var_name, keep=True),
                            layers = {metric: pivot_df.loc[:, metric].values for metric in layers}
         )
 
