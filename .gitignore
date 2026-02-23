@@ -1,22 +1,5 @@
 # Large data files - exceed GitHub's 100MB limit
-SampleData/FP/diann-output/*.csv
-SampleData/FP/diann-output/*.tsv
-SampleData/FP/FP_100pg20ng_25m/report.tsv
-SampleData/FP/SpecLibs/**/library*.tsv
-SampleData/FP/SpecLibs/*/library*.tsv
-SampleData/BPS/*.zip
-SampleData/BPS/*.pkl
-SampleData/BPS/**/results.tsv
-SampleData/BPS/**/results/*.tsv
-SampleData/BPS/**/msstats*.csv
-SampleData/BPS/**/tims-diann.result/*.csv
-SampleData/BPS/**/processing-run/*/tims-diann.result/*.csv
-SampleData/BPS/**/processing-run/*/tims-diann.result/*.tsv
-SampleData/BPS/**/*.parquet
-SampleData/FP/**/*.parquet
-SampleData/**/*.h5
-SampleData/**/*.h5ad
-SampleData/**/*.hdf5
+SampleData/
 
 # Output directories
 outputs/
