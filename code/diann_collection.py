@@ -167,54 +167,93 @@ class DiannCollection:
         # Find all results files based on search type
         return search_path
 
+    def _access_zip(self, 
+                    path: Path,
+                    result_files: list,
+                    target_uuids: Optional[set] = None):
+            
+        try:
+            with zipfile.ZipFile(path, 'r') as zf:
+                temp_dir = tempfile.mkdtemp(prefix='access_zip_')
+                self.temp_dirs.append(temp_dir)  # Track for cleanup
+                zip_contents = zf.namelist()
+
+                tsv_files = [i for i in zip_contents if 'results.tsv' in i]
+                zip_folders = [i for i in zip_contents if '.zip' in str(i)]
+
+                result_zips = [i for i in zip_folders if 'tims-diann.result.zip' in str(i)]
+                other_zip_folders = [i for i in zip_folders if 'tims-diann.result.zip' not in str(i)]
+
+                # Process TSV files
+                for tsv in tsv_files:
+                    zf.extract(tsv, path=temp_dir)
+                    # Extract sample name from path
+                    sample_name = Path(tsv).parent.name if Path(tsv).parent.name else Path(tsv).stem
+                    
+                    # Filter by target UUIDs if provided
+                    if target_uuids is not None and sample_name not in target_uuids:
+                        continue
+                        
+                    result_files.append((sample_name, os.path.join(temp_dir, tsv)))
+                
+                # Process nested zip files recursively
+                for zip_filename in result_zips + other_zip_folders:
+                    try:
+                        # Extract the nested zip file
+                        zf.extract(zip_filename, path=temp_dir)
+                        nested_zip_path = Path(temp_dir) / zip_filename
+                        
+                        # Recursively process the nested zip
+                        self._access_zip(nested_zip_path, result_files, target_uuids)
+                        
+                    except Exception as e:
+                        warnings.warn(f"Error processing nested zip {zip_filename}: {e}")
+                        continue
+
+        except zipfile.BadZipFile:
+            warnings.warn(f"Skipping invalid zip file: {path}")
+        except Exception as e:
+            warnings.warn(f"Error processing zip file {path}: {e}")
+            
+        return result_files
+            
+
     def _find_results_files(
         self,
-        search_dir: Path,
+        path: str,
         search_type: str = 'bps',
         metadata: Optional[pd.DataFrame] = None
     ) -> List[Tuple[str, Path]]:
-        """
-        Find all results files in a directory structure based on search type.
-
-        Parameters:
-        -----------
-        search_dir : Path
-            Directory to search in
-        search_type : str
-            Type of search output structure:
-            - 'bps': tims-diann.result.zip/result.tsv or tims-diann.result/result.tsv
-            - 'fragpipe': sample/diann-output/report.tsv
-        metadata : pd.DataFrame, optional
-            Metadata dataframe with 'processing_run_uuid' column to filter specific searches.
-            If provided, only extracts and loads searches matching the UUIDs in metadata.
-
-        Returns:
-        --------
-        List[Tuple[str, Path]]
-            List of (sample_name, results_file_path) tuples
-        """
-        results_files = []
         
-        # If metadata is provided, get the list of UUIDs to filter by
+        p = Path(path)
+        result_files = []
+        
+        # Extract target UUIDs if metadata is provided
         target_uuids = None
         if metadata is not None and 'processing_run_uuid' in metadata.columns:
             target_uuids = set(metadata['processing_run_uuid'].dropna().unique())
             self._log(f"Filtering for {len(target_uuids)} specific searches from metadata")
-        if search_type == 'bps':
-            # Look for results.tsv files directly in directory structure
-            for tsv_file in search_dir.rglob("results.tsv"):
-                # Extract UUID from the path structure  
-                path_parts = tsv_file.parts
+
+        if p.is_dir():
+            tsv_files = list(p.rglob("results.tsv"))
+            all_zip_folders = list(p.rglob("*.zip"))
+
+            result_zips = [i for i in all_zip_folders if 'tims-diann.result.zip' in str(i)]
+            other_zip_folders = [i for i in all_zip_folders if 'tims-diann.result.zip' not in str(i)]
+
+            # Process direct TSV files
+            for tsv in tsv_files:
+                # Extract sample name from path structure
+                path_parts = tsv.parts
                 sample_name = None
                 for i, part in enumerate(path_parts):
-                    print(path_parts)
                     if part == 'processing-run' and i + 1 < len(path_parts):
                         sample_name = path_parts[i + 1]
                         break
                 
                 # Fallback to parent directory name if no processing-run found
                 if sample_name is None:
-                    sample_name = tsv_file.parent.name
+                    sample_name = tsv.parent.name
                     if sample_name.endswith('.results.tsv'):
                         sample_name = sample_name[:-12]
 
@@ -222,185 +261,53 @@ class DiannCollection:
                 if target_uuids is not None and sample_name not in target_uuids:
                     continue
                     
-                results_files.append((sample_name, tsv_file))
-
-            # Handle zip files that might contain results.tsv files
-            if target_uuids:
-                for uuid in target_uuids:
-                    for i in search_dir.rglob(f"{uuid}"):
-                        print(i)
-
-            for zip_file in search_dir.rglob("*.zip"):
-                try:
-                    temp_dir = tempfile.mkdtemp(prefix='diann_extract_')
-                    self.temp_dirs.append(temp_dir)
-                    print(temp_dir)
-                    with zipfile.ZipFile(zip_file, 'r') as zf:
-                        # Check if this is a main zip with processing-run structure
-                        zip_contents = zf.namelist()
-                        print(zip_contents)
-                        has_processing_run = any('processing-run/' in name for name in zip_contents)
-                        
-                        if has_processing_run and target_uuids is not None:
-                            # Extract only processing-run/{uuid}/ directories for target UUIDs
-                            files_to_extract = []
-                            for zip_file_name in zip_contents:
-                                if 'processing-run/' in zip_file_name:
-                                    # Check if this file belongs to a target UUID
-                                    for uuid in target_uuids:
-                                        if f'processing-run/{uuid}/' in zip_file_name:
-                                            files_to_extract.append(zip_file_name)
-                                            break
-                            
-                            if not files_to_extract:
-                                self._log(f"  No target UUIDs found in {zip_file.name}, skipping")
-                                continue
-                            
-                            # Extract the filtered files
-                            for file_name in files_to_extract:
-                                try:
-                                    zf.extract(file_name, temp_dir)
-                                except Exception as e:
-                                    warnings.warn(f"Error extracting {file_name}: {e}")
-                        else:
-                            # Extract all files if no filtering or no processing-run structure
-                            zf.extractall(temp_dir)
-
-                    temp_path = Path(temp_dir)
-                    
-                    # Track if we find any results in this zip
-                    zip_results_found = False
-                    
-                    # First, look for nested tims-diann.result.zip files and extract them 
-                    for nested_zip in temp_path.rglob("*.result.zip"):
-                        if 'tims-diann' in nested_zip.name.lower():
-                            try:
-                                nested_temp_dir = tempfile.mkdtemp(prefix='diann_nested_')
-                                self.temp_dirs.append(nested_temp_dir)
-                                
-                                with zipfile.ZipFile(nested_zip, 'r') as nested_zf:
-                                    nested_zf.extractall(nested_temp_dir)
-                                
-                                # Search for TSV files in extracted nested zip
-                                nested_temp_path = Path(nested_temp_dir)
-                                for tsv_file in nested_temp_path.rglob("results.tsv"):
-                                    # Extract UUID from the path structure
-                                    # Look for processing-run/{uuid} pattern in the nested zip path
-                                    nested_zip_parts = nested_zip.parts
-                                    sample_name = None
-                                    for i, part in enumerate(nested_zip_parts):
-                                        if part == 'processing-run' and i + 1 < len(nested_zip_parts):
-                                            sample_name = nested_zip_parts[i + 1]
-                                            break
-                                        
-                                    # Fallback to parent directory name if no processing-run found
-                                    if sample_name is None:
-                                        sample_name = nested_zip.parent.name
-                                        
-                                    # Filter by metadata if provided
-                                    if target_uuids is not None and sample_name not in target_uuids:
-                                        continue
-                                            
-                                    results_files.append((sample_name, tsv_file))
-                                    zip_results_found = True
-                                    break
-                                        
-                            except Exception as e:
-                                warnings.warn(f"Error processing nested zip {nested_zip}: {e}")
-                                continue
-                    
-                    # Also search for direct TSV files (non-nested case)  
-                    for tsv_file in temp_path.rglob("results.tsv"):
-                        # Skip if we already processed this via nested zip
-                        if any(nested_zip.parent in tsv_file.parents for nested_zip in temp_path.rglob("*.result.zip")):
-                            continue
-                            
-                        # Extract UUID from the path structure
-                        path_parts = tsv_file.parts
-                        sample_name = None
-                        for i, part in enumerate(path_parts):
-                            if part == 'processing-run' and i + 1 < len(path_parts):
-                                sample_name = path_parts[i + 1]
-                                break
-                        
-                        # Fallback to parent directory name if no processing-run found
-                        if sample_name is None:
-                            sample_name = tsv_file.parent.name
-                            if sample_name.endswith('.result'):
-                                sample_name = sample_name[:-7]
-                        
-                        # Filter by metadata if provided
-                        if target_uuids is not None and sample_name not in target_uuids:
-                            continue
-                            
-                        results_files.append((sample_name, tsv_file))
-                        zip_results_found = True
-                    
-                    # Log if no results were found in this zip
-                    if not zip_results_found:
-                        self._log(f"  No results files found in {zip_file.name}, continuing to next zip")
-                            
-                except zipfile.BadZipFile:
-                    warnings.warn(f"Skipping invalid zip file: {zip_file}")
-                    continue
-                except Exception as e:
-                    warnings.warn(f"Error processing {zip_file}: {e}")
-                    continue
-
-        elif search_type == 'fragpipe':
-            # FragPipe structure: sample/diann-output/report.tsv
-            # Look for report.tsv files directly in directory structure
-            for tsv_file in search_dir.rglob("diann-output/report.tsv"):
-                # Use grandparent directory name as sample name (parent is diann-output)
-                sample_name = tsv_file.parent.parent.name
+                result_files.append((sample_name, tsv))
                 
-                # Filter by metadata if provided
-                if target_uuids is not None and sample_name not in target_uuids:
-                    continue
-                    
-                results_files.append((sample_name, tsv_file))
-
-            # Handle zip files that might contain FragPipe results
-            for zip_file in search_dir.rglob("*.zip"):
+            # Process result zip files by extracting their contents
+            for zip_file in result_zips:
                 try:
-                    temp_dir = tempfile.mkdtemp(prefix='fragpipe_extract_')
+                    temp_dir = tempfile.mkdtemp(prefix='result_zip_')
                     self.temp_dirs.append(temp_dir)
-
+                    
                     with zipfile.ZipFile(zip_file, 'r') as zf:
+                        # Extract all contents
                         zf.extractall(temp_dir)
-
-                    temp_path = Path(temp_dir)
-                    
-                    # Track if we find any results in this zip
-                    zip_results_found = False
-                    
-                    # Search for report.tsv files in diann-output directories
-                    for tsv_file in temp_path.rglob("diann-output/report.tsv"):
-                        # Use grandparent directory name as sample name (parent is diann-output)
-                        sample_name = tsv_file.parent.parent.name
                         
-                        # Filter by metadata if provided
-                        if target_uuids is not None and sample_name not in target_uuids:
-                            continue
+                        # Look for TSV files in the extracted content
+                        temp_path = Path(temp_dir)
+                        for tsv_file in temp_path.rglob("results.tsv"):
+                            # Extract sample name from path structure
+                            path_parts = tsv_file.parts
+                            sample_name = None
+                            for i, part in enumerate(path_parts):
+                                if part == 'processing-run' and i + 1 < len(path_parts):
+                                    sample_name = path_parts[i + 1]
+                                    break
                             
-                        results_files.append((sample_name, tsv_file))
-                        zip_results_found = True
-                    
-                    # Log if no results were found in this zip
-                    if not zip_results_found:
-                        self._log(f"  No FragPipe results found in {zip_file.name}, continuing to next zip")
+                            # Fallback to parent directory name if no processing-run found
+                            if sample_name is None:
+                                sample_name = zip_file.parent.name
                             
-                except zipfile.BadZipFile:
-                    warnings.warn(f"Skipping invalid zip file: {zip_file}")
-                    continue
+                            # Filter by metadata if provided
+                            if target_uuids is not None and sample_name not in target_uuids:
+                                continue
+                                
+                            result_files.append((sample_name, tsv_file))
+                            
                 except Exception as e:
-                    warnings.warn(f"Error processing {zip_file}: {e}")
+                    warnings.warn(f"Error processing result zip {zip_file}: {e}")
                     continue
+                
+            # Process other zip files by extracting and searching recursively
+            for zip_file in other_zip_folders:
+                self._access_zip(zip_file, result_files, target_uuids)
 
-        else:
-            raise ValueError(f"Unknown search_type: {search_type}. Must be 'bps' or 'fragpipe'")
+        elif zipfile.is_zipfile(p):
+            self._access_zip(p, result_files, target_uuids)
+                    
+        return result_files
 
-        return results_files
+
 
     def add_searches(
         self,
@@ -479,12 +386,33 @@ class DiannCollection:
         # Load each results file at each level
         for uuid, results_path in results_files:
             self._log(f"\nLoading {uuid}")
+            
+            # Validate that the file exists and is readable as text
+            try:
+                if not Path(results_path).exists():
+                    self._log(f"⚠ File not found: {results_path}")
+                    continue
+                
+                # Quick check that file is text (TSV) format
+                with open(results_path, 'r', encoding='utf-8') as f:
+                    f.readline()  # Try to read first line as text
+                    
+            except UnicodeDecodeError:
+                self._log(f"⚠ Skipping binary file (not TSV): {results_path}")
+                continue
+            except Exception as e:
+                self._log(f"⚠ Error accessing file {results_path}: {e}")
+                continue
 
             # Check which levels are available FIRST (more efficient - only reads header)
-            available_levels = self.loader.check_available_levels(
-                str(results_path),
-                sections=sections
-            )
+            try:
+                available_levels = self.loader.check_available_levels(
+                    str(results_path),
+                    sections=sections
+                )
+            except Exception as e:
+                self._log(f"⚠ Error checking levels for {results_path}: {e}")
+                continue
 
             # Try to load each requested level
             for level in levels:
