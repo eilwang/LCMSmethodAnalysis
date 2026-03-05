@@ -4,6 +4,26 @@ SampleData/
 *.parquet
 *.tsv
 *.csv
+*.hdf5
+*.h5
+*.pkl
+*.pickle
+*.feather
+*.arrow
+*.db
+*.sqlite
+*.sqlite3
+*.gz
+*.bz2
+*.xz
+*.7z
+*.tar
+*.rar
+*.bin
+*.dat
+*.raw
+*.mzML
+*.mzXML
 !**/small_*.csv
 !**/small_*.tsv
 
