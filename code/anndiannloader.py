@@ -403,17 +403,6 @@ class DiannLoader:
                 adata.obs_names_make_unique()
                 logger.info("Obs names made unique using anndata method.")
 
-        # TODO: make it possible to save to h5ad
-        # if output_path:
-        #     output_dir = os.path.dirname(output_path)
-        #     if output_dir and not os.path.exists(output_dir):
-        #         if mk_dir:
-        #             os.makedirs(output_dir, exist_ok=True)
-        #             print(f"Created directory: {output_dir}/{level}")
-        #         else:
-        #             raise FileNotFoundError(f"Directory does not exist: {output_dir}. Set mk_dir=True to create it.")
-        #     adata.write_h5ad(f'{output_path}/{level}_report.h5ad')
-        #     print(f"AnnData object saved to {output_path}/{level}_report.h5ad")
         return adata
 
 
