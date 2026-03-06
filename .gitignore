@@ -1,5 +1,5 @@
 # Large data files - exceed GitHub's 100MB limit
-SampleData/
+data/
 *.zip
 *.parquet
 *.tsv
@@ -26,6 +26,8 @@ SampleData/
 *.mzXML
 !**/small_*.csv
 !**/small_*.tsv
+
+# archives
 
 # Output directories
 outputs/
