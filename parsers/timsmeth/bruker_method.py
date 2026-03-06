@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 import pandas as pd
 
-from ms_method import MicroTOFMethod
+from LCMSmethodAnalysis.parsers.timsmeth.ms_method import MicroTOFMethod
 from dia_settings_parser import DIASettings
 from archive.synchro_settings_parser import SynchroSettings
 from method_path_resolver import MethodPathResolver

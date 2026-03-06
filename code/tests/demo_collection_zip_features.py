@@ -12,8 +12,8 @@ import shutil
 from pathlib import Path
 import zipfile
 
-from lc_method_collection import VNeoMethodCollection
-from ms_method_collection import MicroTOFMethodCollection
+from LCMSmethodAnalysis.parsers.vneometh.lc_method_collection import VNeoMethodCollection
+from LCMSmethodAnalysis.parsers.timsmeth.ms_method_collection import MicroTOFMethodCollection
 
 
 def demo_lc_scenarios():

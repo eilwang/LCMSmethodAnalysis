@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ms_method_collection import MicroTOFMethodCollection
+from LCMSmethodAnalysis.parsers.timsmeth.ms_method_collection import MicroTOFMethodCollection
 
 print("Testing DIA Window-by-Window Comparison")
 print("=" * 80)

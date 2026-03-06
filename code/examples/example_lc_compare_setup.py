@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lc_method_collection import VNeoMethodCollection
+from LCMSmethodAnalysis.parsers.vneometh.lc_method_collection import VNeoMethodCollection
 
 # Create collection and load methods
 collection = VNeoMethodCollection()

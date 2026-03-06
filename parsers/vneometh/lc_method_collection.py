@@ -4,7 +4,7 @@ import h5py
 import json
 from pathlib import Path
 from typing import Dict, List, Optional, Union
-from vneo_method import VNeoMethod
+from LCMSmethodAnalysis.parsers.vneometh.vneo_method import VNeoMethod
 
 
 class VNeoMethodCollection:

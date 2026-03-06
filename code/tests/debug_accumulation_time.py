@@ -7,8 +7,8 @@ Usage: python debug_accumulation_time.py <path_to_method>
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from bruker_method import BrukerMethod
-from method_path_resolver import MethodPathResolver
+from LCMSmethodAnalysis.parsers.timsmeth.bruker_method import BrukerMethod
+from LCMSmethodAnalysis.code.archive.method_path_resolver import MethodPathResolver
 
 
 def debug_accumulation_time(method_path: str):

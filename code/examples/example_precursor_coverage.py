@@ -16,8 +16,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from diann_collection import DiannCollection
-from ms_method_collection import MSMethodCollection
-from precursor_window_analysis import (
+from LCMSmethodAnalysis.parsers.timsmeth.ms_method_collection import MSMethodCollection
+from LCMSmethodAnalysis.integrator.precursor_window_analysis import (
     analyze_sample_coverage,
     summarize_coverage,
     compare_coverage_across_samples,

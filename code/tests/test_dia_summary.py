@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ms_method_collection import MicroTOFMethodCollection
+from LCMSmethodAnalysis.parsers.timsmeth.ms_method_collection import MicroTOFMethodCollection
 
 # Create collection and load methods
 collection = MicroTOFMethodCollection()

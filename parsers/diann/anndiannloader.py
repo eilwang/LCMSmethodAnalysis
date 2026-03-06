@@ -2,10 +2,12 @@ import pandas as pd
 import yaml
 from typing import List, Optional, Dict
 import warnings
-import anndata as ad # pyright: ignore[reportMissingImports]
+import anndata as ad
 import numpy as np
 import os
 import logging
+from scipy.sparse import csr_matrix
+
 
 # Set up logger for this module
 logger = logging.getLogger(__name__)

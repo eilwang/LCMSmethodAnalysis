@@ -13,7 +13,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Dict, Optional, Any, List
 
-from method_path_resolver import MethodPathResolver
+from LCMSmethodAnalysis.code.archive.method_path_resolver import MethodPathResolver
 
 
 class SynchroSettings:
