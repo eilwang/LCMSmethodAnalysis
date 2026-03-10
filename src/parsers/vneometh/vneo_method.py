@@ -124,10 +124,10 @@ class VNeoMethod:
 
         # Convert numeric columns to float (skip non-numeric like 'Curve')
         for col in gradient_df.columns:
-            gradient_df[col] = pd.to_numeric(gradient_df[col], errors='ignore')
+            gradient_df[col] = pd.to_numeric(gradient_df[col])
 
         for col in equil_df.columns:
-            equil_df[col] = pd.to_numeric(equil_df[col], errors='ignore')
+            equil_df[col] = pd.to_numeric(equil_df[col])
 
         return float(sections['Run time [min]']), sections['Instrument Setup'], gradient_df, equil_df
 
