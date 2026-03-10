@@ -10,7 +10,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Dict, Optional, Any
 
-from method_path_resolver import MethodPathResolver
+from ..method_path_resolver import MethodPathResolver
 
 
 class DIASettings:

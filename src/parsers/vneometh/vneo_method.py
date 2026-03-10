@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Any
 from pathlib import Path
 import olefile
 
-from method_path_resolver import MethodPathResolver
+from ..method_path_resolver import MethodPathResolver
 
 class VNeoMethod:
     """Parse and provide structured access to LC method parameters."""

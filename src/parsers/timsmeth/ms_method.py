@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Any, Union
 import pandas as pd
 from pathlib import Path
 
-from method_path_resolver import MethodPathResolver
+from ..method_path_resolver import MethodPathResolver
 
 
 class MicroTOFMethod:

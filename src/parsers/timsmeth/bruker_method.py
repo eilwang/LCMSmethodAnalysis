@@ -9,10 +9,14 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 import pandas as pd
 
-from LCMSmethodAnalysis.parsers.timsmeth.ms_method import MicroTOFMethod
-from dia_settings_parser import DIASettings
-from archive.synchro_settings_parser import SynchroSettings
-from method_path_resolver import MethodPathResolver
+from .ms_method import MicroTOFMethod
+from .dia_settings_parser import DIASettings
+from ..method_path_resolver import MethodPathResolver
+# Optional synchro settings import
+try:
+    from archive.synchro_settings_parser import SynchroSettings
+except ImportError:
+    SynchroSettings = None
 
 
 class BrukerMethod:
@@ -76,7 +80,7 @@ class BrukerMethod:
             resolver.cleanup()
 
         # Parse synchro settings (optional)
-        if parse_synchro:
+        if parse_synchro and SynchroSettings is not None:
             resolver = MethodPathResolver(self.method_path)
             try:
                 if resolver.exists('synchroSettings.syncsqlite'):
@@ -90,6 +94,7 @@ class BrukerMethod:
             finally:
                 resolver.cleanup()
         else:
+            self.synchro = None
             self.synchro = None
 
     # ========================================================================

@@ -21,7 +21,7 @@ import warnings
 import sys
 from datetime import datetime
 import logging
-from anndiannloader import DiannLoader
+from .anndiannloader import DiannLoader
 import zipfile
 import os
 

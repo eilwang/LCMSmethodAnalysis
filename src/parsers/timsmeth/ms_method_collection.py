@@ -15,7 +15,7 @@ from collections import defaultdict
 import zipfile
 import tempfile
 
-from LCMSmethodAnalysis.parsers.timsmeth.bruker_method import BrukerMethod
+from .bruker_method import BrukerMethod
 
 
 class MSMethodCollection:
