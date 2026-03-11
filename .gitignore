@@ -33,6 +33,7 @@ data/
 outputs/
 output/
 
+
 # Python
 __pycache__/
 *.py[cod]
@@ -57,3 +58,7 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+notebooks/dev/log/
+*.log
+*.txt
