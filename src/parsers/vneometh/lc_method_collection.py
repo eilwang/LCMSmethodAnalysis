@@ -5,6 +5,10 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 from .vneo_method import VNeoMethod
+import zipfile
+import tempfile
+import matplotlib.pyplot as plt
+
 
 
 class VNeoMethodCollection:
@@ -96,8 +100,6 @@ class VNeoMethodCollection:
             If True, overwrite existing methods with same names.
             If False, raise error if any method already exists.
         """
-        import zipfile
-        import tempfile
 
         path = Path(folder_path)
         all_methods = {}
@@ -394,7 +396,7 @@ class VNeoMethodCollection:
         return comparisons
 
     def plot_gradients(self, method_names: Optional[List[str]] = None,
-                      x_col: Optional[str] = None,
+                      x_col: Optional[Union[str, List[str]]] = None,
                       y_cols: Optional[Union[str, List[str]]] = None,
                       twin_axes: bool = False,
                       markers: bool = False,
@@ -408,8 +410,11 @@ class VNeoMethodCollection:
         -----------
         method_names : List[str], optional
             Methods to plot. If None, plots all methods.
-        x_col : str, optional
-            Column to use for x-axis. If None, uses time column (case-insensitive search).
+        x_col : str or List[str], optional
+            Column(s) to use for x-axis. If None, uses time column (case-insensitive search).
+            Can be a single column name or list of column names.
+            Examples: 'Neo.PumpModule.Pump.Time [min]' or
+                     ['Neo.PumpModule.Pump.Time [min]', 'Neo.PumpModule.Pump.%B.Value [%]']
         y_cols : str or List[str], optional
             Column(s) to plot on y-axis. If None, plots %B by default.
             Can be a single column name or list of column names.
@@ -444,6 +449,17 @@ class VNeoMethodCollection:
         collection.plot_gradients(y_cols=['Neo.PumpModule.Pump.%B.Value [%]',
                                           'Neo.PumpModule.Pump.Flow.Nominal [µl/min]'])
 
+        # Multiple x columns (creates separate plots for each x-y combination)
+        collection.plot_gradients(x_col=['Neo.PumpModule.Pump.Time [min]',
+                                        'Neo.PumpModule.Pump.%B.Value [%]'],
+                                 y_cols='Neo.PumpModule.Pump.Flow.Nominal [µl/min]')
+
+        # Multiple x and y columns (pairs them: x[0] with y[0], x[1] with y[1])
+        collection.plot_gradients(x_col=['Neo.PumpModule.Pump.Time [min]',
+                                        'Neo.PumpModule.Pump.%B.Value [%]'],
+                                 y_cols=['Neo.PumpModule.Pump.Flow.Nominal [µl/min]',
+                                        'Neo.PumpModule.Pump.Pressure [bar]'])
+
         # Custom x and y axes
         collection.plot_gradients(x_col='Neo.PumpModule.Pump.%B.Value [%]',
                                  y_cols='Neo.PumpModule.Pump.Flow.Nominal [µl/min]')
@@ -456,7 +472,6 @@ class VNeoMethodCollection:
         # Plot with markers at data points
         collection.plot_gradients(markers=True)
         """
-        import matplotlib.pyplot as plt
 
         if method_names is None:
             method_names = self.list_methods()
@@ -467,7 +482,7 @@ class VNeoMethodCollection:
 
         first_method = self.methods[method_names[0]]
 
-        # Determine x-axis column
+        # Determine x-axis column(s)
         if x_col is None:
             # Find time column (case-insensitive)
             for c in first_method.gradient.columns:
@@ -477,9 +492,18 @@ class VNeoMethodCollection:
             if x_col is None:
                 print("Warning: Could not find time column. Please specify x_col parameter.")
                 return None
-        elif x_col not in first_method.gradient.columns:
-            print(f"Warning: Column '{x_col}' not found in gradient data.")
-            return None
+        
+        # Convert x_col to list if it's a string
+        if isinstance(x_col, str):
+            x_cols = [x_col]
+        else:
+            x_cols = x_col
+
+        # Validate x columns
+        for col in x_cols:
+            if col not in first_method.gradient.columns:
+                print(f"Warning: X column '{col}' not found in gradient data.")
+                return None
 
         # Determine y-axis column(s)
         if y_cols is None:
@@ -497,7 +521,7 @@ class VNeoMethodCollection:
         # Validate y columns
         for col in y_cols:
             if col not in first_method.gradient.columns:
-                print(f"Warning: Column '{col}' not found in gradient data.")
+                print(f"Warning: Y column '{col}' not found in gradient data.")
                 return None
 
         # Create figure if ax not provided
@@ -518,57 +542,93 @@ class VNeoMethodCollection:
             if name in self.methods:
                 method = self.methods[name]
 
-                # Verify x column exists in this method
-                if x_col not in method.gradient.columns:
-                    print(f"Warning: x_col '{x_col}' not found in method '{name}', skipping")
-                    continue
+                # Handle multiple x and y column combinations
+                # If we have multiple x cols and multiple y cols, pair them up
+                # Otherwise, use all combinations
+                if len(x_cols) > 1 and len(y_cols) > 1 and len(x_cols) == len(y_cols):
+                    # Pair x_cols and y_cols: x[0] with y[0], x[1] with y[1], etc.
+                    column_pairs = list(zip(x_cols, y_cols))
+                else:
+                    # Use all combinations of x and y columns
+                    column_pairs = [(x_col, y_col) for x_col in x_cols for y_col in y_cols]
 
-                for y_idx, y_col in enumerate(y_cols):
-                    if y_col in method.gradient.columns:
-                        # Select which axis to use
-                        if twin_axes and len(y_cols) > 1:
-                            current_ax = axes[y_idx]
-                        else:
-                            current_ax = ax
+                for pair_idx, (x_col, y_col) in enumerate(column_pairs):
+                    # Check if columns exist in this method
+                    if x_col not in method.gradient.columns:
+                        print(f"Warning: x_col '{x_col}' not found in method '{name}', skipping")
+                        continue
+                    
+                    if y_col not in method.gradient.columns:
+                        print(f"Warning: y_col '{y_col}' not found in method '{name}', skipping")
+                        continue
 
-                        # Create label
-                        if len(y_cols) > 1 and not twin_axes:
-                            y_label_suffix = f" ({y_col.split('.')[-1]})"
-                            label = f"{name}{y_label_suffix}"
+                    # Select which axis to use for this y column
+                    y_idx = y_cols.index(y_col) if y_col in y_cols else 0
+                    if twin_axes and len(y_cols) > 1:
+                        current_ax = axes[min(y_idx, len(axes) - 1)]
+                    else:
+                        current_ax = ax
+
+                    # Create label
+                    if len(column_pairs) > 1:
+                        if len(x_cols) > 1 and len(y_cols) > 1:
+                            # Multiple x and y: include both in label
+                            x_label = x_col.split('.')[-1] if '.' in x_col else x_col
+                            y_label = y_col.split('.')[-1] if '.' in y_col else y_col
+                            label = f"{name} ({x_label} vs {y_label})"
+                        elif len(y_cols) > 1:
+                            # Multiple y columns: include y column in label
+                            y_label = y_col.split('.')[-1] if '.' in y_col else y_col
+                            label = f"{name} ({y_label})"
+                        elif len(x_cols) > 1:
+                            # Multiple x columns: include x column in label
+                            x_label = x_col.split('.')[-1] if '.' in x_col else x_col
+                            label = f"{name} ({x_label})"
                         else:
                             label = name
+                    else:
+                        label = name
 
-                        # Plot line
-                        plot_kwargs = {
-                            'label': label,
-                            'color': colors[i],
-                            'linewidth': 2,
-                            'alpha': 0.8
-                        }
+                    # Plot line
+                    plot_kwargs = {
+                        'label': label,
+                        'color': colors[i],
+                        'linewidth': 2,
+                        'alpha': 0.8
+                    }
 
-                        if markers:
-                            plot_kwargs.update({
-                                'marker': 'o',
-                                'markersize': 5,
-                                'markeredgecolor': 'white',
-                                'markeredgewidth': 0.8
-                            })
+                    # Adjust line style if multiple pairs per method
+                    if len(column_pairs) > 1:
+                        linestyles = ['-', '--', '-.', ':']
+                        plot_kwargs['linestyle'] = linestyles[pair_idx % len(linestyles)]
 
-                        current_ax.plot(method.gradient[x_col] + x_shift,
-                                       method.gradient[y_col],
-                                       **plot_kwargs)
+                    if markers:
+                        plot_kwargs.update({
+                            'marker': 'o',
+                            'markersize': 5,
+                            'markeredgecolor': 'white',
+                            'markeredgewidth': 0.8
+                        })
+
+                    current_ax.plot(method.gradient[x_col] + x_shift,
+                                method.gradient[y_col],
+                                **plot_kwargs)
 
         # Set axis labels
-        xlabel = x_col.split('.')[-1] if '.' in x_col else x_col
+        if len(x_cols) == 1:
+            xlabel = x_cols[0].split('.')[-1] if '.' in x_cols[0] else x_cols[0]
+        else:
+            xlabel = "X Value"
         ax.set_xlabel(xlabel)
 
         # Set y-axis labels
         if twin_axes and len(y_cols) > 1:
             # Set labels for each axis
             for y_idx, y_col in enumerate(y_cols):
-                ylabel = y_col.split('.')[- 1] if '.' in y_col else y_col
-                axes[y_idx].set_ylabel(ylabel)
-                axes[y_idx].legend(loc=f'upper {"left" if y_idx == 0 else "right"}')
+                if y_idx < len(axes):
+                    ylabel = y_col.split('.')[-1] if '.' in y_col else y_col
+                    axes[y_idx].set_ylabel(ylabel)
+                    axes[y_idx].legend(loc=f'upper {"left" if y_idx == 0 else "right"}')
         else:
             if len(y_cols) == 1:
                 ylabel = y_cols[0].split('.')[-1] if '.' in y_cols[0] else y_cols[0]
@@ -577,7 +637,14 @@ class VNeoMethodCollection:
                 ax.set_ylabel('Value')
             ax.legend(loc='best')
 
-        ax.set_title(f'Gradient Comparison: {", ".join(method_names)}')
+        # Create informative title
+        if len(x_cols) == 1 and len(y_cols) == 1:
+            title = f'Gradient Comparison: {", ".join(method_names)}'
+        else:
+            x_desc = f"{len(x_cols)} X-columns" if len(x_cols) > 1 else x_cols[0].split('.')[-1]
+            y_desc = f"{len(y_cols)} Y-columns" if len(y_cols) > 1 else y_cols[0].split('.')[-1] 
+            title = f'Gradient Comparison ({x_desc} vs {y_desc}): {", ".join(method_names)}'
+        ax.set_title(title)
         ax.grid(True, alpha=0.3)
 
         # Only call tight_layout if we created the figure
