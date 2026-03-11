@@ -64,7 +64,6 @@ class VNeoMethod:
                 key = f'{key} {unit.group(0)}'  # unit.group(0) now has no extra spaces
                 value = value.replace(unit.group(0), '').strip()
             return key.strip(), value.strip()
-
         return line.strip(), None
     
     def _parse_method(self):
@@ -114,6 +113,9 @@ class VNeoMethod:
                         sections[current_section] = {} # type: ignore
                     sections[current_section][key] = value
 
+            elif key == 'Neo.PumpModule.Pump.StartColumnWash':
+                gradient_step[key] = True
+
         sections['Instrument Setup'] = sections.pop('initial     Instrument Setup')
         # Look for Equilibration section with any time prefix
         equil_key = [k for k in sections.keys() if 'Equilibration' in k][0]
@@ -125,6 +127,9 @@ class VNeoMethod:
         # Convert numeric columns to float (skip non-numeric like 'Curve')
         for col in gradient_df.columns:
             gradient_df[col] = pd.to_numeric(gradient_df[col])
+        
+        # get the length of a step
+        gradient_df['length [min]'] = gradient_df['time [min]'].diff().fillna(0)
 
         for col in equil_df.columns:
             equil_df[col] = pd.to_numeric(equil_df[col])
