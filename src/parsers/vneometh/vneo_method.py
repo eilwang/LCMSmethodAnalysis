@@ -1,9 +1,11 @@
 # adapted from https://github.com/nickdelgrosso/XCaliburMethodReader
+import numpy as np
 import pandas as pd
 import re
-from typing import Dict, List, Optional, Any
+# from typing import Dict, List, Optional, Any
 from pathlib import Path
 import olefile
+import copy
 
 from ..method_path_resolver import MethodPathResolver
 
@@ -65,6 +67,9 @@ class VNeoMethod:
                 value = value.replace(unit.group(0), '').strip()
             return key.strip(), value.strip()
         return line.strip(), None
+    
+    def copy(self):
+        return copy.deepcopy(self)
     
     def _parse_method(self):
         raw_text = self.read_meth()
@@ -154,73 +159,43 @@ class VNeoMethod:
         self.cleanup()
 
 
+    def elution_param(self, dead_volume, in_place=False):
+
+        # How much volume is pushed through the column at the RT of the first peptide that elutes
+        # Essentially dead volume of the LC system
+
+        if in_place == False:
+            copied = self.copy()
+            gradient = copied.gradient
+        else:
+            gradient = self.gradient
+        gradient['volume (nL)'] = np.interp(gradient['time [min]'], gradient['time [min]'], gradient['time [min]'] * gradient['Neo.PumpModule.Pump.Flow.Nominal [µl/min]']) * 1000  # convert to nL
+        gradient['total volume (nL)'] = gradient['volume (nL)'].cumsum()
+
+        # # Assuming that it actually takes a a certain %B to go from the pumps to the end of the column, assuming no deadvolume
+        # meth['Nominal Time to %B'] = (meth['Time (min)'] + total_volume_at_rt_min / meth['Flow (nL/min)'])
+
+        # How much volume passes through the system for elution, assuming no dead volume
 
 
-#     def get_gradient_at_time(self, time: float, column: str = '%B') -> Optional[float]:
-#         """
-#         Get gradient value at specific time (with linear interpolation).
+        # total solvent volume that passes through the system including dead volume
+        gradient['Total + Dead Volume (nL)'] = gradient['total volume (nL)'] + dead_volume
+        # time it actually takes to elute the set %B through the end of the column, including dead volume
+        gradient['Actual Time to Elute Nominal %B (min)'] = gradient['Total + Dead Volume (nL)'].apply(lambda x: np.interp(x, gradient['total volume (nL)'], gradient['time [min]']))
 
-#         Parameters:
-#         -----------
-#         time : float
-#             Time point
-#         column : str
-#             Column name (e.g., '%B', '%A')
+        gradient['Actual %B'] = gradient['time [min]'].apply(lambda x: np.interp(x, gradient['Actual Time to Elute Nominal %B (min)'], gradient['Neo.PumpModule.Pump.%B.Value [%]']))
 
-#         Returns:
-#         --------
-#         float or None
-#             Interpolated value or None if gradient not available
-#         """
-#         if self.gradient is None or column not in self.gradient.columns:
-#             return None
+        #   df['Nominal Elution Volume (nL)'] = np.interp(df['Rt'], gradient['Time (min)'], gradient['Total Volume (nL)'])
+        #   # What %B a peptide theoretically elutes at assuming no dead volume
+        #   df['Nominal Elution %B'] = np.interp(df['Rt'], gradient['Time (min)'], gradient['%B'])
 
-#         # Linear interpolation
-#         times = self.gradient['Time'].values
-#         values = self.gradient[column].values
+        #   # What %B a peptide actually elutes at by subtracting the amount of time it takes for everything to pass through the system + column
+        #   ## hmm should this actually only take into account the column volume? not the fully system volume?
+        #   df['Actual Elution %B'] = np.interp(df['Rt'], gradient['Time (min)'], gradient['Actual %B'])
 
-#         if time <= times[0]:
-#             return values[0]
-#         if time >= times[-1]:
-#             return values[-1]
-
-#         # Find surrounding points
-#         for i in range(len(times) - 1):
-#             if times[i] <= time <= times[i + 1]:
-#                 # Linear interpolation
-#                 t1, t2 = times[i], times[i + 1]
-#                 v1, v2 = values[i], values[i + 1]
-#                 return v1 + (v2 - v1) * (time - t1) / (t2 - t1)
-
-#         return None
-
-#     def summary(self) -> str:
-#         """Return summary of method."""
-#         summary_lines = []
-#         summary_lines.append("LC Method Summary")
-#         summary_lines.append("=" * 50)
-
-#         # Key parameters
-#         if self.params:
-#             summary_lines.append("\nKey Parameters:")
-#             for key, value in list(self.params.items())[:10]:  # First 10
-#                 summary_lines.append(f"  {key}: {value.get('raw')}")
-
-#         # Gradient info
-#         if self.gradient is not None:
-#             summary_lines.append(f"\nGradient: {len(self.gradient)} time points")
-#             summary_lines.append(f"Duration: {self.gradient['Time'].min():.1f} - {self.gradient['Time'].max():.1f} min")
-
-#         # Sections
-#         if self.sections:
-#             summary_lines.append(f"\nSections: {len(self.sections)}")
-#             for section in list(self.sections.keys())[:5]:  # First 5
-#                 summary_lines.append(f"  - {section}")
-
-#         return '\n'.join(summary_lines)
-
-#     def __repr__(self):
-#         return f"VNeoMethod(params={len(self.params)}, gradient={'Yes' if self.gradient is not None else 'No'})"
+        if in_place == False:
+            return copied
+        return None
 
 
 # # Usage example
