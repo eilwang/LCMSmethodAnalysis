@@ -159,7 +159,7 @@ class VNeoMethod:
         self.cleanup()
 
 
-    def elution_param(self, dead_volume, in_place=False):
+    def adjusted_elution(self, dead_volume, in_place=False):
 
         # How much volume is pushed through the column at the RT of the first peptide that elutes
         # Essentially dead volume of the LC system
