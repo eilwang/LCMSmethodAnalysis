@@ -517,7 +517,8 @@ class VNeoMethodCollection:
         for i, method_name in enumerate(methods.keys()):
             line = Line2D([0], [0], color=colors[i], linestyle='-', linewidth=2)
             legend_lines.append(line)
-            legend_labels.append(f"Method: {method_name}")
+            wrapped_method = '\n'.join(textwrap.wrap(str(method_name), width=30))
+            legend_labels.append(f"Method: {wrapped_method}")
         for pair_idx, y_col in enumerate(y_cols):
             line = Line2D([0], [0], color='black', linestyle=linestyles[pair_idx % len(linestyles)], linewidth=2)
             legend_lines.append(line)
