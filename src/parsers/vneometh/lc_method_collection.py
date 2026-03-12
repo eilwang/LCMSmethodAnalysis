@@ -1,15 +1,21 @@
+from logging import warning
+import textwrap
+
 import pandas as pd
 import pickle
 import h5py
 import json
 from pathlib import Path
 from typing import Dict, List, Optional, Union
+import numpy as np
+
+from parsers.diann.diann_collection import DiannCollection
 from .vneo_method import VNeoMethod
 import zipfile
 import tempfile
 import matplotlib.pyplot as plt
-
-
+import copy
+import anndata as ad
 
 class VNeoMethodCollection:
     """Collection of LC methods with storage and comparison capabilities."""
@@ -17,6 +23,7 @@ class VNeoMethodCollection:
     def __init__(self):
         """Initialize empty method collection."""
         self.methods: Dict[str, VNeoMethod] = {}
+        self.adjusted_methods: Dict[str, Dict] = {}
 
     @classmethod
     def from_file(cls, filepath: str) -> 'VNeoMethodCollection':
@@ -395,14 +402,16 @@ class VNeoMethodCollection:
 
         return comparisons
 
-    def plot_gradients(self, method_names: Optional[List[str]] = None,
-                      x_col: Optional[Union[str, List[str]]] = None,
-                      y_cols: Optional[Union[str, List[str]]] = None,
-                      twin_axes: bool = False,
-                      markers: bool = False,
-                      figsize=(12, 6),
-                      ax=None,
-                      x_shift=0):
+    def plot_gradients(self, 
+                       method_names: Optional[List[str]] = None,
+                       sample_var: Optional[pd.DataFrame] = None,
+                       x_cols: Optional[Union[None, str, List[str]]] = None,
+                       y_cols: Optional[Union[None, str, List[str]]] = None,
+                       twin_axes: bool = False,
+                       markers: bool = False,
+                       figsize=(12, 6),
+                       ax=None,
+                       x_shift=0):
         """
         Plot gradient profiles from multiple methods overlaid.
 
@@ -472,63 +481,63 @@ class VNeoMethodCollection:
         # Plot with markers at data points
         collection.plot_gradients(markers=True)
         """
+        # if no methods and no sample defined, simply plot all unadjusted methods
 
         if method_names is None:
-            method_names = self.list_methods()
-
-        if not method_names:
-            print("Warning: No methods to plot")
-            return None
-
-        first_method = self.methods[method_names[0]]
-
-        # Determine x-axis column(s)
-        if x_col is None:
-            # Find time column (case-insensitive)
-            for c in first_method.gradient.columns:
-                if 'time' in c.lower():
-                    x_col = c
-                    break
-            if x_col is None:
-                print("Warning: Could not find time column. Please specify x_col parameter.")
-                return None
-        
-        # Convert x_col to list if it's a string
-        if isinstance(x_col, str):
-            x_cols = [x_col]
-        else:
-            x_cols = x_col
-
-        # Validate x columns
-        for col in x_cols:
-            if col not in first_method.gradient.columns:
-                print(f"Warning: X column '{col}' not found in gradient data.")
-                return None
-
-        # Determine y-axis column(s)
-        if y_cols is None:
-            # Try to find %B column
-            b_cols = [col for col in first_method.gradient.columns
-                     if '%B' in col or 'Percent B' in col]
-            if b_cols:
-                y_cols = [b_cols[0]]
+            if sample_var is None:
+                method_names = self.list_methods()
+                first_method = self.methods[method_names[0]]
             else:
-                print("Warning: Could not find %B column. Please specify y_cols parameter.")
-                return None
+                # if selecting by sample, need to use an adjusted method to check in case using any of the additional columns there
+                method_names = sample_var['lc meth'].unique().tolist()
+                
+                first_row = sample_var.reset_index(drop=True).iloc[0]
+                first_sample = first_row['File.Name']
+                first_method_name = first_row['lc meth']
+                first_method = self.adjusted_methods[first_method_name][first_sample]
+
+        else:
+            if isinstance(method_names, str):
+                method_names = [method_names]
+
+            first_method = self.methods[method_names[0]]
+        
+        methods = {}
+        if sample_var is None:
+            for m in method_names:
+                methods[m] = self.methods[m]
+        else:
+            for m in method_names:
+                temp = sample_var[sample_var['lc meth'] == m]
+                for s in temp['File.Name']:
+                    methods[f'{m} + {s}'] = self.adjusted_methods[m][s]
+
+        if x_cols is None:
+            x_cols = ['time [min]']
+        elif isinstance(x_cols, str):
+            x_cols = [x_cols]
+
+        if y_cols is None:
+            y_cols = ['Neo.PumpModule.Pump.Flow.Nominal [µl/min]', 'Neo.PumpModule.Pump.%B.Value [%]']
         elif isinstance(y_cols, str):
             y_cols = [y_cols]
 
+        # Validate x columns
+        for x in x_cols:
+            if x not in first_method.gradient.columns:
+                print(f"Warning: X column '{x}' not found in gradient data.")
+                return None
+
         # Validate y columns
-        for col in y_cols:
-            if col not in first_method.gradient.columns:
-                print(f"Warning: Y column '{col}' not found in gradient data.")
+        for y in y_cols:
+            if y not in first_method.gradient.columns:
+                print(f"Warning: Y column '{y}' not found in gradient data.")
                 return None
 
         # Create figure if ax not provided
         created_fig = ax is None
         if ax is None:
             fig, ax = plt.subplots(figsize=figsize)
-
 
         # Create twin axes if requested and multiple y columns
         axes = [ax]
@@ -537,86 +546,81 @@ class VNeoMethodCollection:
                 axes.append(ax.twinx())
 
         # Plot each method
-        colors = plt.cm.tab10(range(len(method_names)))
-        for i, name in enumerate(method_names):
-            if name in self.methods:
-                method = self.methods[name]
+        # Ensure colors array matches the number of methods
+        color_count = max(len(methods), 1)
+        colors = plt.cm.tab10(range(color_count))
+        for i, (name, method) in enumerate(methods.items()):
+            # Handle multiple x and y column combinations
+            # If we have multiple x cols and multiple y cols, pair them up
+            # Otherwise, use all combinations
 
-                # Handle multiple x and y column combinations
-                # If we have multiple x cols and multiple y cols, pair them up
-                # Otherwise, use all combinations
-                if len(x_cols) > 1 and len(y_cols) > 1 and len(x_cols) == len(y_cols):
-                    # Pair x_cols and y_cols: x[0] with y[0], x[1] with y[1], etc.
-                    column_pairs = list(zip(x_cols, y_cols))
+            if len(x_cols) > 1 and len(y_cols) > 1 and len(x_cols) == len(y_cols):
+                # Pair x_cols and y_cols: x[0] with y[0], x[1] with y[1], etc.
+                column_pairs = list(zip(x_cols, y_cols))
+            else:
+                # Use all combinations of x and y columns
+                column_pairs = [(x_col, y_col) for x_col in x_cols for y_col in y_cols]
+
+            for pair_idx, (x_col, y_col) in enumerate(column_pairs):
+                # Check if columns exist in this method
+                if x_col not in method.gradient.columns:
+                    print(f"Warning: x_col '{x_col}' not found in method '{name}', skipping")
+                    continue
+
+                if y_col not in method.gradient.columns:
+                    print(f"Warning: y_col '{y_col}' not found in method '{name}', skipping")
+                    continue
+
+                # Select which axis to use for this y column
+                y_idx = y_cols.index(y_col) if y_col in y_cols else 0
+                if twin_axes and len(y_cols) > 1:
+                    current_ax = axes[min(y_idx, len(axes) - 1)]
                 else:
-                    # Use all combinations of x and y columns
-                    column_pairs = [(x_col, y_col) for x_col in x_cols for y_col in y_cols]
+                    current_ax = ax
 
-                for pair_idx, (x_col, y_col) in enumerate(column_pairs):
-                    # Check if columns exist in this method
-                    if x_col not in method.gradient.columns:
-                        print(f"Warning: x_col '{x_col}' not found in method '{name}', skipping")
-                        continue
-                    
-                    if y_col not in method.gradient.columns:
-                        print(f"Warning: y_col '{y_col}' not found in method '{name}', skipping")
-                        continue
-
-                    # Select which axis to use for this y column
-                    y_idx = y_cols.index(y_col) if y_col in y_cols else 0
-                    if twin_axes and len(y_cols) > 1:
-                        current_ax = axes[min(y_idx, len(axes) - 1)]
-                    else:
-                        current_ax = ax
-
-                    # Create label
-                    if len(column_pairs) > 1:
-                        if len(x_cols) > 1 and len(y_cols) > 1:
-                            # Multiple x and y: include both in label
-                            x_label = x_col.split('.')[-1] if '.' in x_col else x_col
-                            y_label = y_col.split('.')[-1] if '.' in y_col else y_col
-                            label = f"{name} ({x_label} vs {y_label})"
-                        elif len(y_cols) > 1:
-                            # Multiple y columns: include y column in label
-                            y_label = y_col.split('.')[-1] if '.' in y_col else y_col
-                            label = f"{name} ({y_label})"
-                        elif len(x_cols) > 1:
-                            # Multiple x columns: include x column in label
-                            x_label = x_col.split('.')[-1] if '.' in x_col else x_col
-                            label = f"{name} ({x_label})"
-                        else:
-                            label = name
+                # Create label
+                if len(column_pairs) > 1:
+                    if len(x_cols) > 1 and len(y_cols) > 1:
+                        label = f"{name} ({x_col} vs {y_col})"
+                    elif len(y_cols) > 1:
+                        label = f"{name} ({y_col})"
+                    elif len(x_cols) > 1:
+                        label = f"{name} ({x_col})"
                     else:
                         label = name
+                else:
+                    label = name
+                # Wrap label text for legend
+                label = '\n'.join(textwrap.wrap(label, width=30))
 
-                    # Plot line
-                    plot_kwargs = {
-                        'label': label,
-                        'color': colors[i],
-                        'linewidth': 2,
-                        'alpha': 0.8
-                    }
+                # Plot line
+                plot_kwargs = {
+                    'label': label,
+                    'color': colors[i],
+                    'linewidth': 2,
+                    'alpha': 0.8
+                }
 
-                    # Adjust line style if multiple pairs per method
-                    if len(column_pairs) > 1:
-                        linestyles = ['-', '--', '-.', ':']
-                        plot_kwargs['linestyle'] = linestyles[pair_idx % len(linestyles)]
+                # Adjust line style if multiple pairs per method
+                if len(column_pairs) > 1:
+                    linestyles = ['-', '--', '-.', ':']
+                    plot_kwargs['linestyle'] = linestyles[pair_idx % len(linestyles)]
 
-                    if markers:
-                        plot_kwargs.update({
-                            'marker': 'o',
-                            'markersize': 5,
-                            'markeredgecolor': 'white',
-                            'markeredgewidth': 0.8
-                        })
+                if markers:
+                    plot_kwargs.update({
+                        'marker': 'o',
+                        'markersize': 5,
+                        'markeredgecolor': 'white',
+                        'markeredgewidth': 0.8
+                    })
 
-                    current_ax.plot(method.gradient[x_col] + x_shift,
-                                method.gradient[y_col],
-                                **plot_kwargs)
+                current_ax.plot(method.gradient[x_col] + x_shift,
+                               method.gradient[y_col],
+                               **plot_kwargs)
 
         # Set axis labels
         if len(x_cols) == 1:
-            xlabel = x_cols[0].split('.')[-1] if '.' in x_cols[0] else x_cols[0]
+            xlabel = x_cols[0]
         else:
             xlabel = "X Value"
         ax.set_xlabel(xlabel)
@@ -626,25 +630,49 @@ class VNeoMethodCollection:
             # Set labels for each axis
             for y_idx, y_col in enumerate(y_cols):
                 if y_idx < len(axes):
-                    ylabel = y_col.split('.')[-1] if '.' in y_col else y_col
+                    ylabel = y_col
                     axes[y_idx].set_ylabel(ylabel)
-                    axes[y_idx].legend(loc=f'upper {"left" if y_idx == 0 else "right"}')
+            # Combine all legend entries into one legend on the main axis
+            handles, labels = [], []
+            for ax_ in axes:
+                h, l = ax_.get_legend_handles_labels()
+                handles.extend(h)
+                labels.extend(l)
+            ax.legend(
+                handles,
+                labels,
+                loc='center left',
+                bbox_to_anchor=(1.1, 0.5),
+                fancybox=True,
+                frameon=True,
+                borderaxespad=0,
+                ncol=1,
+                handletextpad=0.5
+            )
         else:
             if len(y_cols) == 1:
-                ylabel = y_cols[0].split('.')[-1] if '.' in y_cols[0] else y_cols[0]
+                ylabel = y_cols[0]
                 ax.set_ylabel(ylabel)
             else:
                 ax.set_ylabel('Value')
-            ax.legend(loc='best')
+            ax.legend(
+                loc='center left',
+                bbox_to_anchor=(1.1, 0.5),
+                fancybox=True,
+                frameon=True,
+                borderaxespad=0,
+                ncol=1,
+                handletextpad=0.5
+            )
 
         # Create informative title
-        if len(x_cols) == 1 and len(y_cols) == 1:
-            title = f'Gradient Comparison: {", ".join(method_names)}'
-        else:
-            x_desc = f"{len(x_cols)} X-columns" if len(x_cols) > 1 else x_cols[0].split('.')[-1]
-            y_desc = f"{len(y_cols)} Y-columns" if len(y_cols) > 1 else y_cols[0].split('.')[-1] 
-            title = f'Gradient Comparison ({x_desc} vs {y_desc}): {", ".join(method_names)}'
-        ax.set_title(title)
+        # if len(x_cols) == 1 and len(y_cols) == 1:
+        #     title = f'Gradient Comparison: {", ".join(method_names)}'
+        # else:
+        #     x_desc = f"{len(x_cols)} X-columns" if len(x_cols) > 1 else x_cols[0].split('.')[-1]
+        #     y_desc = f"{len(y_cols)} Y-columns" if len(y_cols) > 1 else y_cols[0].split('.')[-1] 
+        #     title = f'Gradient Comparison ({x_desc} vs {y_desc}): {", ".join(method_names)}'
+        ax.set_title('Gradient Comparison')
         ax.grid(True, alpha=0.3)
 
         # Only call tight_layout if we created the figure
@@ -873,11 +901,73 @@ class VNeoMethodCollection:
 
     def __repr__(self) -> str:
         """String representation of collection."""
-        return f"VNeoMethodCollection(n_methods={len(self.methods)})"
+        return f"VNeoMethodCollection(n_methods={len(self.methods)}, adjusted_methods={len(self.adjusted_methods)})"
 
     def __getitem__(self, name: str) -> VNeoMethod:
         """Allow dictionary-style access to methods."""
         return self.methods[name]
+
+
+    def copy(self) -> 'VNeoMethodCollection':
+        """Return a deep copy of the collection."""
+        return copy.deepcopy(self)
+    
+    def bulk_adjust_gradients(self, 
+        searchcollection: DiannCollection,
+        samples: Optional[list[str]] = None,
+        lcmethods: Optional[list[str]] = None
+        ):
+        """
+        Adjust gradient profiles in all methods based on a search collection.
+
+        For each method, finds the closest matching gradient profile in the search collection
+        and applies adjustments to align them. This can help correct for systematic differences
+        between methods and make them more comparable.
+
+        Parameters:
+        -----------
+        searchcollection : DiannCollection
+            Collection containing reference gradient profiles to match against
+
+        Returns:
+        --------
+        Dict[str, pd.DataFrame]
+            Dictionary mapping method names to their adjusted gradient DataFrames
+        """
+
+        if 'precursor' not in searchcollection.list_levels():
+            warning("Precursor level not found in search collection. Cannot adjust gradients.")
+
+        not_found = []
+        precursor_ad = searchcollection['precursor'] 
+
+        if samples:
+            precursor_ad = precursor_ad[precursor_ad.var_names.isin(samples)]
+        if lcmethods:
+            precursor_ad = precursor_ad[precursor_ad.var['lc meth'].isin(lcmethods)]
+
+        for idx, row in precursor_ad.var.iterrows(): # type: ignore
+            sample_name = row['File.Name']
+            lcmethod_name = row['lc meth']
+
+            rt_values = precursor_ad[:, sample_name].layers['RT']
+            # Handle NaN values safely
+            if isinstance(rt_values, (np.ndarray, pd.Series)):
+                min_rt = np.nanmin(rt_values)
+            else:
+                min_rt = float(rt_values)
+
+            method_obj = self.get_method(lcmethod_name)
+            if method_obj is None:
+                not_found.append(lcmethod_name) 
+                continue
+
+            if lcmethod_name not in self.adjusted_methods:
+                self.adjusted_methods[lcmethod_name] = {}
+
+            self.adjusted_methods[lcmethod_name][sample_name] = method_obj.adjusted_elution(dead_time=min_rt, in_place=False)
+        
+        # print(f"Adjusted gradients for {len(self.adjusted_methods)} methods. Not found: {pd.Series(not_found).unique()}")
 
 
 # Usage example
