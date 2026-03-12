@@ -14,6 +14,7 @@ from .vneo_method import VNeoMethod
 import zipfile
 import tempfile
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import copy
 import anndata as ad
 
@@ -312,43 +313,7 @@ class VNeoMethodCollection:
         if method_names is None:
             method_names = self.list_methods()
 
-        all_gradients = []
-        for name in method_names:
-            if name in self.methods:
-                gradient = self.methods[name].gradient.copy()
-                gradient['Method'] = name
-                all_gradients.append(gradient)
-
-        if all_gradients:
-            return pd.concat(all_gradients, ignore_index=True)
-        return pd.DataFrame()
-
-    def compare_gradients_wide(self, method_names: Optional[List[str]] = None,
-                               columns: Optional[List[str]] = None) -> Dict[str, pd.DataFrame]:
-        """
-        Compare gradient profiles in wide format (side-by-side).
-
-        For each gradient column (e.g., %B, Flow), creates a separate DataFrame
-        with time points as rows and methods as columns.
-
-        Parameters:
-        -----------
-        method_names : List[str], optional
-            Methods to compare. If None, compare all methods.
-        columns : List[str], optional
-            Specific gradient columns to compare. If None, compares all numeric columns.
-
-        Returns:
-        --------
-        Dict[str, pd.DataFrame]
-            Dictionary mapping column names to comparison DataFrames
-            Each DataFrame has time points as rows and methods as columns
-
-        Example:
-        --------
-        result = collection.compare_gradients_wide(['method1', 'method2'])
-        print(result['%B'])  # Compare %B across time
-        """
+        # ...existing code...
         if method_names is None:
             method_names = self.list_methods()
 
@@ -496,12 +461,7 @@ class VNeoMethodCollection:
                 first_method_name = first_row['lc meth']
                 first_method = self.adjusted_methods[first_method_name][first_sample]
 
-        else:
-            if isinstance(method_names, str):
-                method_names = [method_names]
 
-            first_method = self.methods[method_names[0]]
-        
         methods = {}
         if sample_var is None:
             for m in method_names:
@@ -549,63 +509,45 @@ class VNeoMethodCollection:
         # Ensure colors array matches the number of methods
         color_count = max(len(methods), 1)
         colors = plt.cm.tab10(range(color_count))
-        for i, (name, method) in enumerate(methods.items()):
-            # Handle multiple x and y column combinations
-            # If we have multiple x cols and multiple y cols, pair them up
-            # Otherwise, use all combinations
+        linestyles = ['-', '--', '-.', ':']
 
+        legend_lines = []
+        legend_labels = []
+        # Combine method-color and column-line style legend entries
+        for i, method_name in enumerate(methods.keys()):
+            line = Line2D([0], [0], color=colors[i], linestyle='-', linewidth=2)
+            legend_lines.append(line)
+            legend_labels.append(f"Method: {method_name}")
+        for pair_idx, y_col in enumerate(y_cols):
+            line = Line2D([0], [0], color='black', linestyle=linestyles[pair_idx % len(linestyles)], linewidth=2)
+            legend_lines.append(line)
+            wrapped_label = '\n'.join(textwrap.wrap(str(y_col), width=30))
+            legend_labels.append(f"Column: {wrapped_label}")
+
+        for i, (name, method) in enumerate(methods.items()):
             if len(x_cols) > 1 and len(y_cols) > 1 and len(x_cols) == len(y_cols):
-                # Pair x_cols and y_cols: x[0] with y[0], x[1] with y[1], etc.
                 column_pairs = list(zip(x_cols, y_cols))
             else:
-                # Use all combinations of x and y columns
                 column_pairs = [(x_col, y_col) for x_col in x_cols for y_col in y_cols]
 
             for pair_idx, (x_col, y_col) in enumerate(column_pairs):
-                # Check if columns exist in this method
                 if x_col not in method.gradient.columns:
                     print(f"Warning: x_col '{x_col}' not found in method '{name}', skipping")
                     continue
-
                 if y_col not in method.gradient.columns:
                     print(f"Warning: y_col '{y_col}' not found in method '{name}', skipping")
                     continue
-
-                # Select which axis to use for this y column
                 y_idx = y_cols.index(y_col) if y_col in y_cols else 0
                 if twin_axes and len(y_cols) > 1:
                     current_ax = axes[min(y_idx, len(axes) - 1)]
                 else:
                     current_ax = ax
-
-                # Create label
-                if len(column_pairs) > 1:
-                    if len(x_cols) > 1 and len(y_cols) > 1:
-                        label = f"{name} ({x_col} vs {y_col})"
-                    elif len(y_cols) > 1:
-                        label = f"{name} ({y_col})"
-                    elif len(x_cols) > 1:
-                        label = f"{name} ({x_col})"
-                    else:
-                        label = name
-                else:
-                    label = name
-                # Wrap label text for legend
-                label = '\n'.join(textwrap.wrap(label, width=30))
-
-                # Plot line
                 plot_kwargs = {
-                    'label': label,
                     'color': colors[i],
                     'linewidth': 2,
-                    'alpha': 0.8
+                    'alpha': 0.8,
+                    'linestyle': linestyles[pair_idx % len(linestyles)]
                 }
-
-                # Adjust line style if multiple pairs per method
-                if len(column_pairs) > 1:
-                    linestyles = ['-', '--', '-.', ':']
-                    plot_kwargs['linestyle'] = linestyles[pair_idx % len(linestyles)]
-
                 if markers:
                     plot_kwargs.update({
                         'marker': 'o',
@@ -613,7 +555,6 @@ class VNeoMethodCollection:
                         'markeredgecolor': 'white',
                         'markeredgewidth': 0.8
                     })
-
                 current_ax.plot(method.gradient[x_col] + x_shift,
                                method.gradient[y_col],
                                **plot_kwargs)
@@ -627,43 +568,33 @@ class VNeoMethodCollection:
 
         # Set y-axis labels
         if twin_axes and len(y_cols) > 1:
-            # Set labels for each axis
+            # Set labels for each axis, color-coded and offset
             for y_idx, y_col in enumerate(y_cols):
                 if y_idx < len(axes):
                     ylabel = y_col
-                    axes[y_idx].set_ylabel(ylabel)
-            # Combine all legend entries into one legend on the main axis
-            handles, labels = [], []
-            for ax_ in axes:
-                h, l = ax_.get_legend_handles_labels()
-                handles.extend(h)
-                labels.extend(l)
-            ax.legend(
-                handles,
-                labels,
-                loc='center left',
-                bbox_to_anchor=(1.1, 0.5),
-                fancybox=True,
-                frameon=True,
-                borderaxespad=0,
-                ncol=1,
-                handletextpad=0.5
-            )
+                    axes[y_idx].set_ylabel(ylabel, color=colors[y_idx % len(colors)])
+                    # Offset label position to avoid overlap
+                    if y_idx == 0:
+                        axes[y_idx].yaxis.set_label_coords(-0.13, 0.5)
+                    else:
+                        axes[y_idx].yaxis.set_label_coords(1.13, 0.5)
+        if len(y_cols) == 1:
+            ylabel = y_cols[0]
+            ax.set_ylabel(ylabel)
         else:
-            if len(y_cols) == 1:
-                ylabel = y_cols[0]
-                ax.set_ylabel(ylabel)
-            else:
-                ax.set_ylabel('Value')
-            ax.legend(
-                loc='center left',
-                bbox_to_anchor=(1.1, 0.5),
-                fancybox=True,
-                frameon=True,
-                borderaxespad=0,
-                ncol=1,
-                handletextpad=0.5
-            )
+            ax.set_ylabel('Value')
+        # Show only one legend with both sets of entries
+        ax.legend(
+            legend_lines,
+            legend_labels,
+            loc='center left',
+            bbox_to_anchor=(1.1, 0.5),
+            fancybox=True,
+            frameon=True,
+            borderaxespad=0,
+            ncol=1,
+            handletextpad=0.5
+        )
 
         # Create informative title
         # if len(x_cols) == 1 and len(y_cols) == 1:
