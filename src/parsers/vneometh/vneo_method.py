@@ -2,10 +2,12 @@
 import numpy as np
 import pandas as pd
 import re
-# from typing import Dict, List, Optional, Any
+from typing import Optional, Union
 from pathlib import Path
 import olefile
 import copy
+import warnings
+
 
 from ..method_path_resolver import MethodPathResolver
 
@@ -159,7 +161,12 @@ class VNeoMethod:
         self.cleanup()
 
 
-    def adjusted_elution(self, dead_volume, in_place=False):
+    def adjusted_elution(self, 
+                         in_place: bool = False,
+                         dead_time: Optional[float] = None,
+                         dead_volume: Optional[float] = None,
+                         default_shift: float = 0
+                         ) -> Union[None, "VNeoMethod"]:
 
         # How much volume is pushed through the column at the RT of the first peptide that elutes
         # Essentially dead volume of the LC system
@@ -167,16 +174,24 @@ class VNeoMethod:
         if in_place == False:
             copied = self.copy()
             gradient = copied.gradient
+
         else:
             gradient = self.gradient
-        gradient['volume (nL)'] = np.interp(gradient['time [min]'], gradient['time [min]'], gradient['time [min]'] * gradient['Neo.PumpModule.Pump.Flow.Nominal [µl/min]']) * 1000  # convert to nL
+            
+        gradient['volume (nL)'] = gradient['length [min]'] * gradient['Neo.PumpModule.Pump.Flow.Nominal [µl/min]'] * 1000  # convert to nL
         gradient['total volume (nL)'] = gradient['volume (nL)'].cumsum()
+
+        if not dead_volume:
+            if not dead_time:
+                warnings.warn(f'dead time not supplied. Using RT shift of {default_shift} instead')
+                dead_time = default_shift
+
+            dead_volume = np.interp(dead_time, gradient['time [min]'], gradient['total volume (nL)'])
 
         # # Assuming that it actually takes a a certain %B to go from the pumps to the end of the column, assuming no deadvolume
         # meth['Nominal Time to %B'] = (meth['Time (min)'] + total_volume_at_rt_min / meth['Flow (nL/min)'])
 
         # How much volume passes through the system for elution, assuming no dead volume
-
 
         # total solvent volume that passes through the system including dead volume
         gradient['Total + Dead Volume (nL)'] = gradient['total volume (nL)'] + dead_volume
@@ -195,6 +210,7 @@ class VNeoMethod:
 
         if in_place == False:
             return copied
+        
         return None
 
 
