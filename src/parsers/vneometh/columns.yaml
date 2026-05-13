@@ -1,0 +1,9 @@
+# Column configurations for different analysis levels
+
+A15:
+  direct:
+    column_flow_pressure:
+      - 150 / 170
+  NS5:
+    trap_flow_pressure:
+      - 1000 / 140

@@ -1,0 +1,74 @@
+{
+  "format": 1,
+  "restore": {
+    "/hpc/projects/mass_spec/eileenwang/MethodOpt/LCMSmethodAnalysis/src/parsers/vneometh/extractor/thermo_dlls/extract_pressure_dotnet/extract_pressure_dotnet.csproj": {}
+  },
+  "projects": {
+    "/hpc/projects/mass_spec/eileenwang/MethodOpt/LCMSmethodAnalysis/src/parsers/vneometh/extractor/thermo_dlls/extract_pressure_dotnet/extract_pressure_dotnet.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/hpc/projects/mass_spec/eileenwang/MethodOpt/LCMSmethodAnalysis/src/parsers/vneometh/extractor/thermo_dlls/extract_pressure_dotnet/extract_pressure_dotnet.csproj",
+        "projectName": "extract_pressure_dotnet",
+        "projectPath": "/hpc/projects/mass_spec/eileenwang/MethodOpt/LCMSmethodAnalysis/src/parsers/vneometh/extractor/thermo_dlls/extract_pressure_dotnet/extract_pressure_dotnet.csproj",
+        "packagesPath": "/home/eileen.wang/.nuget/packages/",
+        "outputPath": "/hpc/projects/mass_spec/eileenwang/MethodOpt/LCMSmethodAnalysis/src/parsers/vneometh/extractor/thermo_dlls/extract_pressure_dotnet/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/home/eileen.wang/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net6.0"
+        ],
+        "sources": {
+          "/usr/lib64/dotnet/library-packs": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net6.0": {
+            "targetAlias": "net6.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.100"
+      },
+      "frameworks": {
+        "net6.0": {
+          "targetAlias": "net6.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.NETCore.App.Host.linux-x64",
+              "version": "[6.0.36, 6.0.36]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/lib64/dotnet/sdk/10.0.103/RuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

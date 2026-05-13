@@ -21,12 +21,12 @@ import warnings
 import sys
 from datetime import datetime
 import logging
-from .anndiannloader import DiannLoader
+from .bps_loader import BPSLoader
 import zipfile
 import os
 
 
-class DiannCollection:
+class BPSCollection:
     """
     Collection object for managing multiple DIA-NN search results.
 
@@ -34,9 +34,9 @@ class DiannCollection:
     Each level contains all samples concatenated together.
     """
 
-    def __init__(self, config_path: str = "diann_columns.yaml", log_file: Optional[str] = None):
+    def __init__(self, search_type: str = 'bps_diann', config_path: Optional[str] = None, log_file: Optional[str] = None):
         """
-        Initialize DIA-NN collection.
+        Initialize BPS collection.
 
         Parameters:
         -----------
@@ -46,7 +46,21 @@ class DiannCollection:
             Path to log file. If provided, all print output will be written to this file.
             If None, output goes to stdout only.
         """
-        self.loader = DiannLoader(config_path)
+        self.search_type = search_type
+
+        if config_path is None:
+            if "diann" in search_type: 
+                config_path = "diann_columns.yaml"
+            elif 'spectronaut' in search_type:
+                config_path = "spnt_columns.yaml"
+            else:
+                config_path = "diann_columns.yaml"
+
+        if not os.path.isabs(config_path):
+            module_dir = os.path.dirname(os.path.abspath(__file__))
+            config_path = os.path.join(module_dir, config_path)
+
+        self.loader = BPSLoader(search_type=search_type, config_path=config_path)
         # Store as dict: {level: AnnData} where each AnnData contains all samples
         self.data: Dict[str, ad.AnnData] = {}
         self.temp_dirs: List[str] = []
@@ -78,6 +92,7 @@ class DiannCollection:
             warnings_logger.addHandler(log_handler)
             warnings_logger.propagate = False
 
+    
     def _log(self, message: str, to_stdout: bool = None):
         """
         Log a message to log file and optionally stdout.
@@ -161,11 +176,21 @@ class DiannCollection:
     def _find_results_files(
         self,
         path: str,
-        search_type: str = 'bps',
-        metadata: Optional[pd.DataFrame] = None
+        metadata: Optional[pd.DataFrame] = None,
+        levels: Optional[List[str]] = None
     ) -> Dict[str, pd.DataFrame]:
         """
         Load and return results data using helper functions for different search types.
+        
+        Parameters:
+        -----------
+        path : str
+            Path to search results
+        metadata : pd.DataFrame, optional
+            Metadata for filtering specific searches
+        levels : List[str], optional
+            Specific levels to load (for Spectronaut: peptide, protein)
+            If None, loads all available levels
         
         Returns:
         --------
@@ -182,7 +207,7 @@ class DiannCollection:
             target_uuids = set(metadata['processing_run_uuid'].dropna().unique())
             self._log(f"Filtering for {len(target_uuids)} specific searches from metadata")
 
-        if search_type == 'bps':
+        if self.search_type == 'bps_diann':
             if p.is_dir():
                 # Process direct TSV files
                 tsv_files = list(p.rglob("results.tsv"))
@@ -231,7 +256,7 @@ class DiannCollection:
                 except Exception as e:
                     self._log(f"Error processing BPS zip {p}: {e}")
 
-        elif search_type == 'fragpipe':
+        elif 'fragpipe' in self.search_type:
             if p.is_dir():
                 # Use _load_fragpipe_diann for directory
                 try:
@@ -271,8 +296,120 @@ class DiannCollection:
                 except Exception as e:
                     self._log(f"Error processing FragPipe zip {p}: {e}")
 
+        elif self.search_type == 'bps_spectronaut':
+            if levels is not None:
+                self._log(f"Filtering Spectronaut files for levels: {levels}")
+            
+            if p.is_dir():
+                # Look specifically for spectronaut-id.peptide.parquet and spectronaut-id.protein.parquet
+                # Filter based on requested levels for efficiency
+                spectronaut_files = []
+                if levels is None or 'peptide' in levels:
+                    peptide_files = list(p.rglob("spectronaut-id.peptide.parquet"))
+                    spectronaut_files.extend(peptide_files)
+                    if peptide_files:
+                        self._log(f"Found {len(peptide_files)} peptide parquet files")
+                if levels is None or 'protein' in levels:
+                    protein_files = list(p.rglob("spectronaut-id.protein.parquet"))
+                    spectronaut_files.extend(protein_files)
+                    if protein_files:
+                        self._log(f"Found {len(protein_files)} protein parquet files")
+                
+                for parquet_file in spectronaut_files:
+                    # Extract sample name from the parent directory containing the parquet file
+                    # Typically this would be something like processing-runs/uuid/p8s/
+                    path_parts = parquet_file.parts
+                    sample_name = None
+                    
+                    # Look for processing-runs pattern
+                    for i, part in enumerate(path_parts):
+                        if 'processing-run' in part and i + 1 < len(path_parts):
+                            sample_name = path_parts[i + 1]
+                            break
+                    
+                    # Fallback to parent directory name if no processing-run found
+                    if sample_name is None:
+                        sample_name = parquet_file.parent.parent.name  # Go up to get meaningful name
+                    
+                    # Add level info to distinguish peptide vs protein files
+                    file_type = 'peptide' if 'peptide' in parquet_file.name else 'protein'
+                    sample_key = f"{sample_name}_{file_type}"
+
+                    # Filter by metadata if provided
+                    if target_uuids is not None and sample_name not in target_uuids:
+                        continue
+
+                    # Load the Parquet file directly
+                    try:
+                        df = pd.read_parquet(parquet_file)
+                        df['file_type'] = file_type  # Add metadata about file type
+                        results_data[sample_key] = df
+                        self._log(f"Loaded {file_type} data from {parquet_file.name}")
+                    except Exception as e:
+                        self._log(f"Error reading {parquet_file}: {e}")
+                        continue
+
+            elif zipfile.is_zipfile(p):
+                # Handle zipped spectronaut exports
+                try:
+                    temp_dir = tempfile.mkdtemp(prefix='spectronaut_extract_')
+                    self.temp_dirs.append(temp_dir)
+
+                    with zipfile.ZipFile(p, 'r') as zf:
+                        # Look for spectronaut files in the zip, filtered by requested levels
+                        spectronaut_files = []
+                        all_files = zf.namelist()
+                        
+                        if levels is None or 'peptide' in levels:
+                            peptide_files = [name for name in all_files if name.endswith('spectronaut-id.peptide.parquet')]
+                            spectronaut_files.extend(peptide_files)
+                            if peptide_files:
+                                self._log(f"Found {len(peptide_files)} peptide parquet files in zip")
+                        if levels is None or 'protein' in levels:
+                            protein_files = [name for name in all_files if name.endswith('spectronaut-id.protein.parquet')]
+                            spectronaut_files.extend(protein_files)
+                            if protein_files:
+                                self._log(f"Found {len(protein_files)} protein parquet files in zip")
+                        
+                        for file_path in spectronaut_files:
+                            # Extract the specific file
+                            extracted_path = zf.extract(file_path, temp_dir)
+                            
+                            # Extract sample name from path within zip
+                            path_parts = Path(file_path).parts
+                            sample_name = None
+                            
+                            for i, part in enumerate(path_parts):
+                                if 'processing-run' in part and i + 1 < len(path_parts):
+                                    sample_name = path_parts[i + 1]
+                                    break
+                            
+                            if sample_name is None:
+                                sample_name = Path(file_path).parent.parent.name
+                            
+                            # Add level info to distinguish peptide vs protein files
+                            file_type = 'peptide' if 'peptide' in Path(file_path).name else 'protein'
+                            sample_key = f"{sample_name}_{file_type}"
+
+                            # Filter by metadata if provided
+                            if target_uuids is not None and sample_name not in target_uuids:
+                                continue
+                            
+                            # Load the extracted Parquet file
+                            try:
+                                df = pd.read_parquet(extracted_path)
+                                df['file_type'] = file_type  # Add metadata about file type
+                                results_data[sample_key] = df
+                                self._log(f"Loaded {file_type} data from zip: {file_path}")
+                            except Exception as e:
+                                self._log(f"Error reading {file_path} from zip: {e}")
+                                continue
+                                
+                except Exception as e:
+                    self._log(f"Error processing Spectronaut zip {p}: {e}")
+
         else:
-            raise ValueError(f"Unknown search_type: {search_type}. Must be 'bps' or 'fragpipe'")
+            raise ValueError(f"Unknown search_type: {self.search_type}. Must be 'bps_diann', 'bps_spectronaut', or 'fragpipe'")
         
         # Report summary of what was found
         if results_data:
@@ -305,28 +442,23 @@ class DiannCollection:
         levels: Optional[List[str]] = None,
         sections: Optional[List[str]] = None,
         strict: bool = False,
-        search_type: str = 'bps',
         metadata: Optional[pd.DataFrame] = None,
         verbose: bool = False
     ):
         """
-        Load DIA-NN results from a folder or zip and add to collection.
+        Load search results from a folder or zip and add to collection.
 
         Parameters:
         -----------
         path : str | list
-            Path to folder or zip file containing DIA-NN search results, or a list of such paths    
+            Path to folder or zip file containing search results, or a list of such paths    
         levels : List[str], optional
-            Specific levels to load (precursor, protein, gene)
+            Specific levels to load (precursor, protein, gene, peptide)
             If None, loads all available levels
         sections : List[str], optional
             Specific sections to include
         strict : bool
             If True, raise error if expected columns are missing
-        search_type : str
-            Type of search output structure:
-            - 'bps': tims-diann.result.zip/result.tsv (default)
-            - 'fragpipe': sample/diann-output/report.tsv
         metadata : pd.DataFrame, optional
             Metadata dataframe with 'processing_run_uuid' column to filter specific searches.
             If provided, only loads search results matching the UUIDs in the metadata.
@@ -344,20 +476,21 @@ class DiannCollection:
         all_results_data = {}
         for p in paths:
             search_path = self._get_search_path(p)
-            results_data = self._find_results_files(search_path, search_type=search_type, metadata=metadata)
+            results_data = self._find_results_files(search_path, metadata=metadata, levels=levels)
             all_results_data.update(results_data)
 
         if not all_results_data:
             expected_structure = {
-                'bps': 'tims-diann.result/results.tsv',
+                'bps_diann': 'tims-diann.result/results.tsv',
+                'bps_spectronaut': 'spectronaut-id.peptide.parquet / spectronaut-id.protein.parquet',
                 'fragpipe': 'sample/diann-output/report.tsv'
             }
-            self._log(f"⚠ No results found in {len(paths)} path(s) for search_type='{search_type}'", to_stdout=verbose)
-            self._log(f"  Expected structure: {expected_structure[search_type]}", to_stdout=verbose)
+            self._log(f"⚠ No results found in {len(paths)} path(s) for search_type='{self.search_type}'", to_stdout=verbose)
+            self._log(f"  Expected structure: {expected_structure.get(self.search_type, 'unknown')}", to_stdout=verbose)
             self._log(f"  Continuing with empty collection...", to_stdout=verbose)
             return
 
-        self._log(f"Found {len(all_results_data)} DIA-NN result samples ({search_type} format)", to_stdout=verbose)
+        self._log(f"Found {len(all_results_data)} result samples ({self.search_type} format)", to_stdout=verbose)
         
         # Log which UUIDs were found if metadata filtering was used
         if target_uuids is not None:
@@ -379,107 +512,132 @@ class DiannCollection:
         for uuid, results_df in all_results_data.items():
             self._log(f"\nProcessing {uuid}", to_stdout=verbose)
             
-            # Create a temporary file for the DataFrame to work with existing loader
-            temp_path = None
-            try:
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.tsv', delete=False) as temp_file:
-                    results_df.to_csv(temp_file.name, sep='\t', index=False)
-                    temp_path = temp_file.name
+            # For Spectronaut data, process DataFrame directly without TSV conversion
+            if 'spectronaut' in self.search_type:
+                # Extract the level type from the UUID (peptide or protein)
+                level_type = 'peptide' if '_peptide' in uuid else 'protein'
                 
-                # Check which levels are available FIRST (more efficient - only reads header)
-                available_levels = self.loader.check_available_levels(
-                    temp_path,
-                    sections=sections
-                )
+                # Only process if this level is requested
+                if level_type not in levels:
+                    continue
+                    
+                try:
+                    self._log(f"  Loading {level_type} level...", to_stdout=verbose)
+                    
+                    # Add to temporary list for concatenation (like other search types)
+                    level_samples[level_type].append(results_df)
+                    
+                    self._log(f"    ✓ {level_type}: {results_df.shape}", to_stdout=verbose)
+                    
+                except Exception as e:
+                    if not strict:
+                        self._log(f"⚠ Could not load {level_type} level: \n{e}", to_stdout=verbose)
+                    else:
+                        self._log(f"Error loading {uuid} at {level_type} level: {e}", to_stdout=verbose)
+                    continue
+                    
+            else:
+                # For DIA-NN data, use the original TSV-based approach
+                temp_path = None
+                try:
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.tsv', delete=False) as temp_file:
+                        results_df.to_csv(temp_file.name, sep='\t', index=False)
+                        temp_path = temp_file.name
+                    
+                    # Check which levels are available FIRST (more efficient - only reads header)
+                    available_levels = self.loader.check_available_levels(
+                        temp_path,
+                        sections=sections
+                    )
 
-                # Try to load each requested level
-                for level in levels:
-                    level_info = available_levels.get(level, {})
+                    # Try to load each requested level
+                    for level in levels:
+                        level_info = available_levels.get(level, {})
 
-                    try:
-                        self._log(f"  Loading {level} level...", to_stdout=verbose)
+                        try:
+                            self._log(f"  Loading {level} level...", to_stdout=verbose)
 
-                        # Load using the temporary file path
-                        df = self.loader.load_to_df(
-                            temp_path,
-                            level=level,
-                            sections=sections,
-                            strict=False,
-                            search_type=search_type
-                        )
+                            # Load using the temporary file path
+                            df = self.loader.load_to_df(
+                                temp_path,
+                                level=level,
+                                sections=sections,
+                                strict=False
+                            )
 
-                        # Add sample UUID/name to df
-                        if search_type == 'bps':
-                            df['UUID'] = uuid
+                            # Add sample UUID/name to df (only for non-Spectronaut data)
+                            if 'spectronaut' not in self.search_type:
+                                df['UUID'] = uuid
 
-                        # Add to temporary list for concatenation
-                        level_samples[level].append(df)
+                            # Add to temporary list for concatenation
+                            level_samples[level].append(df)
 
-                        # Print DataFrame summary
-                        self._log(f"    ✓ {level}: {df.shape}", to_stdout=verbose)
-                        self._log(f"\n{df}\n", to_stdout=verbose)
+                            # Print DataFrame summary
+                            self._log(f"    ✓ {level}: {df.shape}", to_stdout=verbose)
 
-                    except Exception as e:
-                        # Handle errors during loading
-                        if not strict:
-                            self._log(f"⚠ Could not load {level} level: \n{e}", to_stdout=verbose)
-                        else:
-                            self._log(f"Error loading {uuid} at {level} level: {e}", to_stdout=verbose)
-                            break
-                        continue
-                        
-            except Exception as e:
-                self._log(f"⚠ Error processing {uuid}: {e}", to_stdout=verbose)
-                continue
-            finally:
-                # Clean up temp file
-                if temp_path:
-                    try:
-                        os.unlink(temp_path)
-                    except:
-                        pass
-        # return level_samples
-        # Concatenate samples for each level
+                        except Exception as e:
+                            # Handle errors during loading
+                            if not strict:
+                                self._log(f"⚠ Could not load {level} level: \n{e}", to_stdout=verbose)
+                            else:
+                                self._log(f"Error loading {uuid} at {level} level: {e}", to_stdout=verbose)
+                                break
+                            continue
+                            
+                except Exception as e:
+                    self._log(f"⚠ Error processing {uuid}: {e}")
+                finally:
+                    # Clean up temp file
+                    if temp_path:
+                        try:
+                            os.unlink(temp_path)
+                        except:
+                            pass
+        # Concatenate samples for each level (for all search types)
         self._log("\nCombining samples across levels...", to_stdout=verbose)
 
         for level in levels:
             if level_samples[level]:  # If we have any samples for this level
                 self._log(f"  Combining {len(level_samples[level])} samples for {level} level...", to_stdout=verbose)
-                
+
+                # Concatenate DataFrames first, then convert to AnnData
                 concat_df = pd.concat(level_samples[level], axis=0, ignore_index=True)
-                
+
                 adata = self.loader.load_to_adata(
                             concat_df,
                             level=level,
                             sections=sections,
-                            strict=False,
-                            search_type=search_type
+                            strict=False
                     )
 
                 # If level already exists in collection, concatenate with existing data
                 if level in self.data:
-                    self._log(f"    Concatenating with existing {level} data...", to_stdout=verbose)
-                
-                self.data[level] = adata
-                self._log(f"    ✓ Added {level} with shape: {self.data[level].shape}", to_stdout=verbose)
+                    self._log(f"    Concatenating with existing {level} data...")
+                    existing = self.data[level]
+
+                    # adata concat with merge "first" fills in na values in the obs when concating the var
                     # need to perform separate obs merge to ensure we keep all obs metadata from both existing and new data, and then reassign to adata.obs after the var concat
 
-                # merged_obs = existing.obs.merge(adata.obs, how='outer', left_index=True, right_index=True)
-                merged_obs = pd.concat([existing.obs, adata.obs], axis=0).drop_duplicates()
+                    # merged_obs = existing.obs.merge(adata.obs, how='outer', left_index=True, right_index=True)
+                    merged_obs = pd.concat([existing.obs, adata.obs], axis=0).drop_duplicates()
 
-                adata = ad.concat(
+                    adata = ad.concat(
                         [existing, adata],
                         axis=1,  # Concatenate along var (columns/samples) axis
                         join='outer',
                         merge=None  # Keep first value for non-aligned obs metadata
                     )
-
-                merged_obs.reindex(index=adata.obs_names, fill_value=np.nan)
-                adata.obs = merged_obs
-                adata.obs_names = merged_obs.index
-                
-                self.data[level] = adata
-                self._log(f"    ✓ Added {level} with shape: {self.data[level].shape}")
+                    
+                    merged_obs.reindex(index=adata.obs_names, fill_value=np.nan)
+                    adata.obs = merged_obs
+                    adata.obs_names = merged_obs.index
+                    
+                    self.data[level] = adata
+                    self._log(f"    ✓ Concatenated {level} with shape: {self.data[level].shape}")
+                else:
+                    # First time adding this level
+                    self.data[level] = adata
+                    self._log(f"    ✓ Added new {level} level with shape: {self.data[level].shape}")
 
 
     def get(self, level: str, sample: Optional[str] = None) -> ad.AnnData:
@@ -657,7 +815,7 @@ class DiannCollection:
             raise ValueError(f"Unsupported file format: {filepath_obj.suffix}. Use .pkl or .h5ad")
 
     @classmethod
-    def from_file(cls, filepath: str, config_path: str = "diann_columns.yaml") -> 'DiannCollection':
+    def from_file(cls, filepath: str, search_type: str = "bps_diann", config_path: Optional[str] = None) -> 'BPSCollection':
         """
         Load collection from file.
 
@@ -665,14 +823,25 @@ class DiannCollection:
         -----------
         filepath : str
             Path to saved file
+        search_type : str
+            Type of search (default: "bps_spectronaut")
         config_path : str
             Path to YAML configuration file
 
         Returns:
         --------
-        DiannCollection
+        BPSCollection
             Loaded collection
         """
+
+        if config_path is None:
+            if "diann" in search_type: 
+                config_path = "diann_columns.yaml"
+            elif 'spectronaut' in search_type:
+                config_path = "spnt_columns.yaml"
+            else:
+                config_path = "diann_columns.yaml"
+                
         filepath_obj = Path(filepath)
         collection = cls(config_path)
 
@@ -724,7 +893,7 @@ class DiannCollection:
     def __repr__(self) -> str:
         """String representation of collection."""
         levels = list(self.data.keys())
-        return f"DiannCollection(levels={levels})"
+        return f"BPSCollection(levels={levels})"
 
     def __enter__(self):
         """Context manager entry."""

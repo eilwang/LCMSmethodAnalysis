@@ -1,0 +1,130 @@
+# Column configurations for different analysis levels
+
+levels:
+  peptide:
+    var:      
+      - processing_run_uuid
+      - sample_name
+    obs:
+      - stripped_peptide
+      - ptms
+      - ptm_locations
+      - precursor_mz
+      - precursor_charge
+    protein_obs:
+      - protein_group_parent_id
+      - protein_group_name
+    layers:
+      - ptm_confidence_index
+      - ptm_confidence_values
+      - ptm_confidence_locations
+      - precursor_quantity
+      - precursor_q_value
+      - rt
+      - irt
+      - measured_ook0
+      - mass_accuracy
+      - peptide_n_missed_cleavages
+      - precursor_quantity_ms1
+      - precursor_quantity_ms2
+      - precursor_mz_calibrated
+      - rt_start
+      - rt_end
+      - predicted_irt
+      - predicted_rt
+      - precursor_fwhm
+      - is_proteotypic
+      - is_imputed
+      - shape_quality
+      - pep_score
+      - c_score
+      - c_score_normalised
+
+  protein:
+    var:
+      - processing_run_uuid
+      - sample_name
+    obs:
+      - protein_group_name
+      - protein_group_id
+      - organisms
+      - protein_description
+      - protein_accession
+      - protein_name
+      - gene_id
+    layers:
+      - g_quantity
+      - pg_q_value
+      - number_precursors
+      - number_peptides
+      - number_stripped_peptides
+      - pg_quantity_ms1
+      - pg_quantity_ms2
+      - pg_cv
+      - pg_q_value_run_wise
+
+
+
+
+
+
+
+
+# Additional columns reference (commented out)
+# File.Name
+# Run
+# Protein.Group
+# Protein.Ids
+# Protein.Names
+# Genes
+# PG.Quantity
+# PG.Normalised
+# Genes.Quantity
+# Genes.Normalised
+# Genes.MaxLFQ
+# Genes.MaxLFQ.Unique
+# PG.MaxLFQ
+# Modified.Sequence
+# Stripped.Sequence
+# Precursor.Id
+# Precursor.Charge
+# Q.Value
+# Protein.Q.Value
+# PG.Q.Value
+# GG.Q.Value
+# Proteotypic
+# Precursor.Quantity
+# Precursor.Normalised
+# Quantity.Quality
+# RT
+# RT.Start
+# RT.Stop
+# iRT
+# Predicted.RT
+# Predicted.iRT
+# First.Protein.Description
+# Lib.Q.Value
+# Ms1.Profile.Corr
+# Ms1.Corr.Sum
+# Ms1.Area
+# Evidence
+# CScore
+# Decoy.Evidence
+# Decoy.CScore
+# Fragment.Quant.Raw
+# Fragment.Quant.Corrected
+# Fragment.Correlations
+# MS2.Scan
+# Precursor.FWHM
+# Precursor.Error.Ppm
+# Corr.Precursor.Error.Ppm
+# Data.Points
+# Ms1.Iso.Corr.Sum
+# Library.Precursor.Mz
+# Corrected.Precursor.Mz
+# Fragment.Info
+# Precursor.Calibrated.Mz
+# Fragment.Calibrated.Mz
+# Exp.1/K0
+# Lib.1/K0
+# Label.Ratio

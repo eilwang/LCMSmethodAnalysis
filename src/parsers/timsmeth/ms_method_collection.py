@@ -487,6 +487,7 @@ class MSMethodCollection:
                     linewidth: float = 0.5,
                     figsize=(14, 8),
                     show_labels: bool = False,
+                    color=None,
                     ax=None):
         """
         Plot DIA windows from multiple methods overlaid on same axis.

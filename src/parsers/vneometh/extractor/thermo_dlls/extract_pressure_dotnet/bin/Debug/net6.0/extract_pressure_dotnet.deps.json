@@ -1,0 +1,53 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v6.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v6.0": {
+      "extract_pressure_dotnet/1.0.0": {
+        "dependencies": {
+          "ThermoFisher.CommonCore.Data": "5.0.0.93",
+          "ThermoFisher.CommonCore.RawFileReader": "5.0.0.93"
+        },
+        "runtime": {
+          "extract_pressure_dotnet.dll": {}
+        }
+      },
+      "ThermoFisher.CommonCore.Data/5.0.0.93": {
+        "runtime": {
+          "ThermoFisher.CommonCore.Data.dll": {
+            "assemblyVersion": "5.0.0.93",
+            "fileVersion": "5.0.0.93"
+          }
+        }
+      },
+      "ThermoFisher.CommonCore.RawFileReader/5.0.0.93": {
+        "runtime": {
+          "ThermoFisher.CommonCore.RawFileReader.dll": {
+            "assemblyVersion": "5.0.0.93",
+            "fileVersion": "5.0.0.93"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "extract_pressure_dotnet/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "ThermoFisher.CommonCore.Data/5.0.0.93": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "ThermoFisher.CommonCore.RawFileReader/5.0.0.93": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union
 import numpy as np
 
-from parsers.diann.diann_collection import DiannCollection
+from ..bps.bps_collection import BPSCollection
 from .vneo_method import VNeoMethod
 import zipfile
 import tempfile
@@ -26,10 +26,11 @@ from plotly.subplots import make_subplots
 class VNeoMethodCollection:
     """Collection of LC methods with storage and comparison capabilities."""
 
-    def __init__(self):
+    def __init__(self, column_specs: Optional[str] = "columns.yaml"):
         """Initialize empty method collection."""
         self.methods: Dict[str, VNeoMethod] = {}
         self.adjusted_methods: Dict[str, Dict] = {}
+        self.column_specs = column_specs
 
     @classmethod
     def from_file(cls, filepath: str) -> 'VNeoMethodCollection':
@@ -300,7 +301,7 @@ class VNeoMethodCollection:
 
         return df
 
-    def compare_gradients(self, method_names: Optional[List[str]] = None) -> pd.DataFrame:
+    def compare_gradients(self, method_names: Optional[List[str]] = None, columns: Optional[List[str]] = None) -> pd.DataFrame:
         """
         Compare gradient profiles across methods (long format).
 
@@ -459,9 +460,12 @@ class VNeoMethodCollection:
             else:
                 # if selecting by sample, need to use an adjusted method to check in case using any of the additional columns there
                 method_names = sample_var['lc meth'].unique().tolist()
-                
+                if 'File.Name' not in sample_var.columns:
+                    sample_col = 'sample_name'
+                else:
+                    sample_col = 'File.Name'
                 first_row = sample_var.reset_index(drop=True).iloc[0]
-                first_sample = first_row['File.Name']
+                first_sample = first_row[sample_col]
                 first_method_name = first_row['lc meth']
                 first_method = self.adjusted_methods[first_method_name][first_sample]
 
@@ -476,11 +480,16 @@ class VNeoMethodCollection:
             for m in method_names:
                 methods[m] = self.methods[m]
         else:
+            if 'File.Name' not in sample_var.columns:
+                sample_col = 'sample_name'
+            else:
+                sample_col = 'File.Name'
             for m in method_names:
                 temp = sample_var[sample_var['lc meth'] == m]
-                for s in temp['File.Name']:
+                for s in temp[sample_col]:
                     methods[f'{m} + {s}'] = self.adjusted_methods[m][s]
 
+        # Handle column specifications - convert to dictionary format for better organization
         if x_cols is None:
             x_cols = ['time [min]']
         elif isinstance(x_cols, str):
@@ -491,8 +500,24 @@ class VNeoMethodCollection:
         elif isinstance(y_cols, str):
             y_cols = [y_cols]
 
+        # Create column specifications dictionary
+        if len(x_cols) > 1 and len(y_cols) > 1 and len(x_cols) == len(y_cols):
+            # Pair x and y columns when equal lengths
+            column_specs = {f"plot_{i+1}": {"x": x_col, "y": y_col} 
+                           for i, (x_col, y_col) in enumerate(zip(x_cols, y_cols))}
+        else:
+            # Create all combinations of x and y
+            column_specs = {f"plot_{i+1}": {"x": x_col, "y": y_col} 
+                           for i, (x_col, y_col) in enumerate(
+                               (x_col, y_col) for x_col in x_cols for y_col in y_cols
+                           )}
+        
+        # Extract column pairs for backwards compatibility
+        column_pairs = [(spec["x"], spec["y"]) for spec in column_specs.values()]
+
         # Validate x columns
         for x in x_cols:
+            print(first_method.gradient.columns)
             if x not in first_method.gradient.columns:
                 print(f"Warning: X column '{x}' not found in gradient data.")
                 return None
@@ -522,24 +547,41 @@ class VNeoMethodCollection:
 
         legend_lines = []
         legend_labels = []
-        # Combine method-color and column-line style legend entries
-        for i, method_name in enumerate(methods.keys()):
-            line = Line2D([0], [0], color=colors[i], linestyle='-', linewidth=2)
-            legend_lines.append(line)
-            wrapped_method = '\n'.join(textwrap.wrap(str(method_name), width=30))
-            legend_labels.append(f"Method: {wrapped_method}")
-        for pair_idx, y_col in enumerate(y_cols):
-            line = Line2D([0], [0], color='black', linestyle=linestyles[pair_idx % len(linestyles)], linewidth=2)
-            legend_lines.append(line)
-            wrapped_label = '\n'.join(textwrap.wrap(str(y_col), width=30))
-            legend_labels.append(f"Column: {wrapped_label}")
+        # When both x and y are specified, show x-y pair combinations in legend
+        if len(x_cols) > 0 and len(y_cols) > 0:
+            # Create legend entries for method-color combinations
+            for i, method_name in enumerate(methods.keys()):
+                line = Line2D([0], [0], color=colors[i], linestyle='-', linewidth=2)
+                legend_lines.append(line)
+                wrapped_method = '\n'.join(textwrap.wrap(str(method_name), width=30))
+                legend_labels.append(f"{wrapped_method}")
+            
+            # Create legend entries for x-y pair combinations using column_specs dictionary
+            for pair_idx, (plot_name, spec) in enumerate(column_specs.items()):
+                line = Line2D([0], [0], color='black', linestyle=linestyles[pair_idx % len(linestyles)], linewidth=2)
+                legend_lines.append(line)
+                
+                # Create readable x-y pair label
+                x_col, y_col = spec["x"], spec["y"]
+                x_short = x_col.split('.')[-1] if '.' in x_col else x_col
+                y_short = y_col.split('.')[-1] if '.' in y_col else y_col
+                pair_label = f"{x_short} vs {y_short}"
+                wrapped_label = '\n'.join(textwrap.wrap(pair_label, width=30))
+                legend_labels.append(f"{wrapped_label}")
+        else:
+            # Fallback to original legend for simple cases
+            for i, method_name in enumerate(methods.keys()):
+                line = Line2D([0], [0], color=colors[i], linestyle='-', linewidth=2)
+                legend_lines.append(line)
+                wrapped_method = '\n'.join(textwrap.wrap(str(method_name), width=30))
+                legend_labels.append(f"{wrapped_method}")
+            for pair_idx, y_col in enumerate(y_cols):
+                line = Line2D([0], [0], color='black', linestyle=linestyles[pair_idx % len(linestyles)], linewidth=2)
+                legend_lines.append(line)
+                wrapped_label = '\n'.join(textwrap.wrap(str(y_col), width=30))
+                legend_labels.append(f"Column: {wrapped_label}")
 
         for i, (name, method) in enumerate(methods.items()):
-            if len(x_cols) > 1 and len(y_cols) > 1 and len(x_cols) == len(y_cols):
-                column_pairs = list(zip(x_cols, y_cols))
-            else:
-                column_pairs = [(x_col, y_col) for x_col in x_cols for y_col in y_cols]
-
             for pair_idx, (x_col, y_col) in enumerate(column_pairs):
                 if x_col not in method.gradient.columns:
                     print(f"Warning: x_col '{x_col}' not found in method '{name}', skipping")
@@ -572,6 +614,9 @@ class VNeoMethodCollection:
         # Set axis labels
         if len(x_cols) == 1:
             xlabel = x_cols[0]
+        elif all('time' in col.lower() for col in x_cols):
+            # If all x columns contain 'time', use simple time label
+            xlabel = "time [min]"
         else:
             xlabel = "X Value"
         ax.set_xlabel(xlabel)
@@ -854,9 +899,11 @@ class VNeoMethodCollection:
         return copy.deepcopy(self)
     
     def bulk_adjust_gradients(self, 
-        searchcollection: DiannCollection,
+        searchcollection: BPSCollection,
         samples: Optional[list[str]] = None,
-        lcmethods: Optional[list[str]] = None
+        lcmethods: Optional[list[str]] = None,
+        extrapolate_points: Optional[list] = None,
+        direct_only: Optional[float] = None
         ):
         """
         Adjust gradient profiles in all methods based on a search collection.
@@ -867,31 +914,54 @@ class VNeoMethodCollection:
 
         Parameters:
         -----------
-        searchcollection : DiannCollection
+        searchcollection : BPSCollection
             Collection containing reference gradient profiles to match against
+        samples : Optional[list[str]]
+            List of specific samples to process
+        lcmethods : Optional[list[str]]  
+            List of specific LC methods to process
+        extrapolate_points : list of dict, optional
+            Additional gradient points to add at end. Each dict should contain:
+            {'time': float, 'b_percent': float, 'flow_rate': float}
+            where 'time' is the length/duration of the interval (not absolute time)
+        direct_only : float, optional
+            Direct injection dead volume in nL (for trap column bypass scenarios)
 
         Returns:
         --------
         Dict[str, pd.DataFrame]
             Dictionary mapping method names to their adjusted gradient DataFrames
         """
-
-        if 'precursor' not in searchcollection.list_levels():
-            warning("Precursor level not found in search collection. Cannot adjust gradients.")
-
         not_found = []
-        precursor_ad = searchcollection['precursor'] 
+
+        if 'diann' in searchcollection.search_type:
+            if 'precursor' not in searchcollection.list_levels():
+                warning("Precursor level not found in search collection. Cannot adjust gradients.")
+            ad = searchcollection['precursor'] 
+            sample_col = 'File.Name'
+
+        elif 'spectronaut' in searchcollection.search_type:
+            if 'peptide' not in searchcollection.list_levels():
+                warning("Peptide level not found in search collection. Cannot adjust gradients.")
+            ad = searchcollection['peptide']
+            sample_col = 'sample_name'
 
         if samples:
-            precursor_ad = precursor_ad[precursor_ad.var_names.isin(samples)]
+            ad = ad[ad.var_names.isin(samples)]
         if lcmethods:
-            precursor_ad = precursor_ad[precursor_ad.var['lc meth'].isin(lcmethods)]
-
-        for idx, row in precursor_ad.var.iterrows(): # type: ignore
-            sample_name = row['File.Name']
+            ad = ad[ad.var['lc meth'].isin(lcmethods)]
+        for idx, row in ad.var.iterrows(): # type: ignore
+            sample_name = row[sample_col]
             lcmethod_name = row['lc meth']
 
-            rt_values = precursor_ad[:, sample_name].layers['RT']
+            # Get RT values based on search type
+            if 'spectronaut' in searchcollection.search_type:
+                # For Spectronaut, use rt_start layer
+                rt_values = ad[:, ad.var[sample_col] == sample_name].layers['rt_start']
+            else:
+                # For DIA-NN, use RT layer
+                rt_values = ad[:, ad.var[sample_col] == sample_name].layers['RT']
+                
             # Handle NaN values safely
             if isinstance(rt_values, (np.ndarray, pd.Series)):
                 min_rt = np.nanmin(rt_values)
@@ -906,292 +976,297 @@ class VNeoMethodCollection:
             if lcmethod_name not in self.adjusted_methods:
                 self.adjusted_methods[lcmethod_name] = {}
 
-            self.adjusted_methods[lcmethod_name][sample_name] = method_obj.adjusted_elution(dead_time=min_rt, in_place=False)
+            self.adjusted_methods[lcmethod_name][sample_name] = method_obj.adjusted_elution(
+                dead_time=min_rt, 
+                in_place=False,
+                extrapolate_points=extrapolate_points,
+                direct_only=direct_only
+            )
         
         # print(f"Adjusted gradients for {len(self.adjusted_methods)} methods. Not found: {pd.Series(not_found).unique()}")
 
 
-    def plot_gradients_interact(self, 
-                       method_names: Optional[List[str]] = None,
-                       sample_var: Optional[pd.DataFrame] = None,
-                       x_cols: Optional[Union[None, str, List[str]]] = None,
-                       y_cols: Optional[Union[None, str, List[str]]] = None,
-                       twin_axes: bool = False,
-                       markers: bool = False,
-                       figsize=(12, 6),
-                       fig: Optional[go.Figure] = None,
-                       x_shift=0) -> go.Figure:
-        """
-        Plot gradient profiles from multiple methods overlaid.
+#     def plot_gradients_interact(self, 
+#                        method_names: Optional[List[str]] = None,
+#                        sample_var: Optional[pd.DataFrame] = None,
+#                        x_cols: Optional[Union[None, str, List[str]]] = None,
+#                        y_cols: Optional[Union[None, str, List[str]]] = None,
+#                        twin_axes: bool = False,
+#                        markers: bool = False,
+#                        figsize=(12, 6),
+#                        fig: Optional[go.Figure] = None,
+#                        x_shift=0) -> go.Figure:
+#         """
+#         Plot gradient profiles from multiple methods overlaid.
 
-        Parameters:
-        -----------
-        method_names : List[str], optional
-            Methods to plot. If None, plots all methods.
-        x_col : str or List[str], optional
-            Column(s) to use for x-axis. If None, uses time column (case-insensitive search).
-            Can be a single column name or list of column names.
-            Examples: 'Neo.PumpModule.Pump.Time [min]' or
-                     ['Neo.PumpModule.Pump.Time [min]', 'Neo.PumpModule.Pump.%B.Value [%]']
-        y_cols : str or List[str], optional
-            Column(s) to plot on y-axis. If None, plots %B by default.
-            Can be a single column name or list of column names.
-            Examples: 'Neo.PumpModule.Pump.%B.Value [%]' or
-                     ['Neo.PumpModule.Pump.%B.Value [%]', 'Neo.PumpModule.Pump.Flow.Nominal [µl/min]']
-        twin_axes : bool
-            If True and multiple y_cols are provided, creates separate y-axes for each column.
-            First column uses left y-axis, second uses right y-axis (twinx).
-            Useful when y columns have different scales. (default: False)
-        markers : bool
-            If True, adds small circular markers with white outlines at each data point.
-            Useful for visualizing gradient steps. (default: False)
-        figsize : tuple
-            Figure size (default: (12, 6)), only used if ax is None
-        ax : matplotlib.axes.Axes, optional
-            Axes to plot on. If None, creates a new figure.
+#         Parameters:
+#         -----------
+#         method_names : List[str], optional
+#             Methods to plot. If None, plots all methods.
+#         x_col : str or List[str], optional
+#             Column(s) to use for x-axis. If None, uses time column (case-insensitive search).
+#             Can be a single column name or list of column names.
+#             Examples: 'Neo.PumpModule.Pump.Time [min]' or
+#                      ['Neo.PumpModule.Pump.Time [min]', 'Neo.PumpModule.Pump.%B.Value [%]']
+#         y_cols : str or List[str], optional
+#             Column(s) to plot on y-axis. If None, plots %B by default.
+#             Can be a single column name or list of column names.
+#             Examples: 'Neo.PumpModule.Pump.%B.Value [%]' or
+#                      ['Neo.PumpModule.Pump.%B.Value [%]', 'Neo.PumpModule.Pump.Flow.Nominal [µl/min]']
+#         twin_axes : bool
+#             If True and multiple y_cols are provided, creates separate y-axes for each column.
+#             First column uses left y-axis, second uses right y-axis (twinx).
+#             Useful when y columns have different scales. (default: False)
+#         markers : bool
+#             If True, adds small circular markers with white outlines at each data point.
+#             Useful for visualizing gradient steps. (default: False)
+#         figsize : tuple
+#             Figure size (default: (12, 6)), only used if ax is None
+#         ax : matplotlib.axes.Axes, optional
+#             Axes to plot on. If None, creates a new figure.
 
-        Returns:
-        --------
-        matplotlib.axes.Axes or tuple
-            If twin_axes=False: returns the main axis
-            If twin_axes=True: returns tuple of axes
-        Examples:
-        ---------
-        # Plot time vs %B (default)
-        collection.plot_gradients()
+#         Returns:
+#         --------
+#         matplotlib.axes.Axes or tuple
+#             If twin_axes=False: returns the main axis
+#             If twin_axes=True: returns tuple of axes
+#         Examples:
+#         ---------
+#         # Plot time vs %B (default)
+#         collection.plot_gradients()
 
-        # Plot time vs flow rate
-        collection.plot_gradients(y_cols='Neo.PumpModule.Pump.Flow.Nominal [µl/min]')
+#         # Plot time vs flow rate
+#         collection.plot_gradients(y_cols='Neo.PumpModule.Pump.Flow.Nominal [µl/min]')
 
-        # Plot time vs multiple columns
-        collection.plot_gradients(y_cols=['Neo.PumpModule.Pump.%B.Value [%]',
-                                          'Neo.PumpModule.Pump.Flow.Nominal [µl/min]'])
+#         # Plot time vs multiple columns
+#         collection.plot_gradients(y_cols=['Neo.PumpModule.Pump.%B.Value [%]',
+#                                           'Neo.PumpModule.Pump.Flow.Nominal [µl/min]'])
 
-        # Multiple x columns (creates separate plots for each x-y combination)
-        collection.plot_gradients(x_col=['Neo.PumpModule.Pump.Time [min]',
-                                        'Neo.PumpModule.Pump.%B.Value [%]'],
-                                 y_cols='Neo.PumpModule.Pump.Flow.Nominal [µl/min]')
+#         # Multiple x columns (creates separate plots for each x-y combination)
+#         collection.plot_gradients(x_col=['Neo.PumpModule.Pump.Time [min]',
+#                                         'Neo.PumpModule.Pump.%B.Value [%]'],
+#                                  y_cols='Neo.PumpModule.Pump.Flow.Nominal [µl/min]')
 
-        # Multiple x and y columns (pairs them: x[0] with y[0], x[1] with y[1])
-        collection.plot_gradients(x_col=['Neo.PumpModule.Pump.Time [min]',
-                                        'Neo.PumpModule.Pump.%B.Value [%]'],
-                                 y_cols=['Neo.PumpModule.Pump.Flow.Nominal [µl/min]',
-                                        'Neo.PumpModule.Pump.Pressure [bar]'])
+#         # Multiple x and y columns (pairs them: x[0] with y[0], x[1] with y[1])
+#         collection.plot_gradients(x_col=['Neo.PumpModule.Pump.Time [min]',
+#                                         'Neo.PumpModule.Pump.%B.Value [%]'],
+#                                  y_cols=['Neo.PumpModule.Pump.Flow.Nominal [µl/min]',
+#                                         'Neo.PumpModule.Pump.Pressure [bar]'])
 
-        # Custom x and y axes
-        collection.plot_gradients(x_col='Neo.PumpModule.Pump.%B.Value [%]',
-                                 y_cols='Neo.PumpModule.Pump.Flow.Nominal [µl/min]')
+#         # Custom x and y axes
+#         collection.plot_gradients(x_col='Neo.PumpModule.Pump.%B.Value [%]',
+#                                  y_cols='Neo.PumpModule.Pump.Flow.Nominal [µl/min]')
 
-        # Plot with twin y-axes (different scales)
-        collection.plot_gradients(y_cols=['Neo.PumpModule.Pump.%B.Value [%]',
-                                          'Neo.PumpModule.Pump.Flow.Nominal [µl/min]'],
-                                 twin_axes=True)
+#         # Plot with twin y-axes (different scales)
+#         collection.plot_gradients(y_cols=['Neo.PumpModule.Pump.%B.Value [%]',
+#                                           'Neo.PumpModule.Pump.Flow.Nominal [µl/min]'],
+#                                  twin_axes=True)
 
-        # Plot with markers at data points
-        collection.plot_gradients(markers=True)
-        """
-        # if no methods and no sample defined, simply plot all unadjusted methods
+#         # Plot with markers at data points
+#         collection.plot_gradients(markers=True)
+#         """
+#         # if no methods and no sample defined, simply plot all unadjusted methods
 
 
-        # TODO: toggle by 1. method, 2. trace type 3. sample (if adjusted) 4. combination
+#         # TODO: toggle by 1. method, 2. trace type 3. sample (if adjusted) 4. combination
 
-        if method_names is None:
-            if sample_var is None:
-                method_names = self.list_methods()
-                first_method = self.methods[method_names[0]]
-            else:
-                # if selecting by sample, need to use an adjusted method to check in case using any of the additional columns there
-                method_names = sample_var['lc meth'].unique().tolist()
+#         if method_names is None:
+#             if sample_var is None:
+#                 method_names = self.list_methods()
+#                 first_method = self.methods[method_names[0]]
+#             else:
+#                 # if selecting by sample, need to use an adjusted method to check in case using any of the additional columns there
+#                 method_names = sample_var['lc meth'].unique().tolist()
                 
-                first_row = sample_var.reset_index(drop=True).iloc[0]
-                first_sample = first_row['File.Name']
-                first_method_name = first_row['lc meth']
-                first_method = self.adjusted_methods[first_method_name][first_sample]
+#                 first_row = sample_var.reset_index(drop=True).iloc[0]
+#                 first_sample = first_row['File.Name']
+#                 first_method_name = first_row['lc meth']
+#                 first_method = self.adjusted_methods[first_method_name][first_sample]
         
-        toggle_dict = {}
-        methods = {}
-        # if no individual samples are defined, only look at the methods 
-        if sample_var is None:
-            for m in method_names:
-                methods[m] = self.methods[m]
+#         toggle_dict = {}
+#         methods = {}
+#         # if no individual samples are defined, only look at the methods 
+#         if sample_var is None:
+#             for m in method_names:
+#                 methods[m] = self.methods[m]
 
-        # if individual samples are defined, need to look at the adjusted methods for each sample and method combination
-        else:
-            for m in method_names:
-                temp = sample_var[sample_var['lc meth'] == m]
-                for s in temp['File.Name']:
-                    if m in methods.keys():
-                        methods[m][s] = self.adjusted_methods[m][s]
-                    else:
-                        methods[m] = {s: self.adjusted_methods[m][s]}
+#         # if individual samples are defined, need to look at the adjusted methods for each sample and method combination
+#         else:
+#             for m in method_names:
+#                 temp = sample_var[sample_var['lc meth'] == m]
+#                 for s in temp['File.Name']:
+#                     if m in methods.keys():
+#                         methods[m][s] = self.adjusted_methods[m][s]
+#                     else:
+#                         methods[m] = {s: self.adjusted_methods[m][s]}
 
-        if x_cols is None:
-            x_cols = ['time [min]']
-        elif isinstance(x_cols, str):
-            x_cols = [x_cols]
+#         if x_cols is None:
+#             x_cols = ['time [min]']
+#         elif isinstance(x_cols, str):
+#             x_cols = [x_cols]
 
-        if y_cols is None:
-            y_cols = ['Neo.PumpModule.Pump.Flow.Nominal [µl/min]', 'Neo.PumpModule.Pump.%B.Value [%]']
-        elif isinstance(y_cols, str):
-            y_cols = [y_cols]
+#         if y_cols is None:
+#             y_cols = ['Neo.PumpModule.Pump.Flow.Nominal [µl/min]', 'Neo.PumpModule.Pump.%B.Value [%]']
+#         elif isinstance(y_cols, str):
+#             y_cols = [y_cols]
 
-        # Validate x columns
-        for x in x_cols:
-            if x not in first_method.gradient.columns:
-                print(f"Warning: X column '{x}' not found in gradient data.")
-                return None
+#         # Validate x columns
+#         for x in x_cols:
+#             if x not in first_method.gradient.columns:
+#                 print(f"Warning: X column '{x}' not found in gradient data.")
+#                 return None
 
-        # Validate y columns
-        for y in y_cols:
-            if y not in first_method.gradient.columns:
-                print(f"Warning: Y column '{y}' not found in gradient data.")
-                return None
+#         # Validate y columns
+#         for y in y_cols:
+#             if y not in first_method.gradient.columns:
+#                 print(f"Warning: Y column '{y}' not found in gradient data.")
+#                 return None
 
-        # Create figure if fig not provided
-        if fig is None:
-            if twin_axes is None:
-                fig = go.Figure(figsize=figsize)
-            else:
-                fig = make_subplots(specs=[[{"secondary_y": True}]])
+#         # Create figure if fig not provided
+#         if fig is None:
+#             if twin_axes is None:
+#                 fig = go.Figure(figsize=figsize)
+#             else:
+#                 fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-        # Plot each method
-        # Ensure colors array matches the number of methods
-        color_count = max(len(methods), 1)
-        colors = plt.cm.tab10(range(color_count))
-        linestyles = ['-', '--', '-.', ':']
+#         # Plot each method
+#         # Ensure colors array matches the number of methods
+#         color_count = max(len(methods), 1)
+#         colors = plt.cm.tab10(range(color_count))
+#         linestyles = ['-', '--', '-.', ':']
 
-        legend_lines = []
-        legend_labels = []
+#         legend_lines = []
+#         legend_labels = []
 
-        col_pairs = [(x, y) for x in x_cols for y in y_cols]
+#         col_pairs = [(x, y) for x in x_cols for y in y_cols]
 
-        # define line styles to be used
+#         # define line styles to be used
 
-        for i, (x, y) in enumerate(col_pairs):
-            line = Line2D([0], [0], color='black', linestyle=linestyles[i % len(linestyles)], linewidth=2)
-            legend_lines.append(line)
-            wrapped_label = '\n'.join(textwrap.wrap(f'{x} vs {y}', width=30))
-            legend_labels.append(f"Column: {wrapped_label}")
+#         for i, (x, y) in enumerate(col_pairs):
+#             line = Line2D([0], [0], color='black', linestyle=linestyles[i % len(linestyles)], linewidth=2)
+#             legend_lines.append(line)
+#             wrapped_label = '\n'.join(textwrap.wrap(f'{x} vs {y}', width=30))
+#             legend_labels.append(f"Column: {wrapped_label}")
 
-        toggle_dict['method'] = {method_name: [] for method_name in methods.keys()}
-        toggle_dict['x+y'] = {f'{x}+{y}': [] for x, y in col_pairs}
-        if sample_var is not None:
-            toggle_dict['sample'] = {sample_name: [] for sample_name in sample_var['File.Name'].unique().tolist()}  
+#         toggle_dict['method'] = {method_name: [] for method_name in methods.keys()}
+#         toggle_dict['x+y'] = {f'{x}+{y}': [] for x, y in col_pairs}
+#         if sample_var is not None:
+#             toggle_dict['sample'] = {sample_name: [] for sample_name in sample_var['File.Name'].unique().tolist()}  
 
 
-        if sample_var is None:
-            for i, (method_name, method) in enumerate(methods.items()):
-                for pair_idx, (x, y) in enumerate(col_pairs):
-                    if x not in method.gradient.columns:
-                        print(f"Warning: x_col '{x}' not found in method '{method_name}', skipping")
-                        continue
-                    if y not in method.gradient.columns:
-                        print(f"Warning: y_col '{y}' not found in method '{name}', skipping")
-                        continue
+#         if sample_var is None:
+#             for i, (method_name, method) in enumerate(methods.items()):
+#                 for pair_idx, (x, y) in enumerate(col_pairs):
+#                     if x not in method.gradient.columns:
+#                         print(f"Warning: x_col '{x}' not found in method '{method_name}', skipping")
+#                         continue
+#                     if y not in method.gradient.columns:
+#                         print(f"Warning: y_col '{y}' not found in method '{method_name}', skipping")
+#                         continue
                     
-                    plot_kwargs = {
-                        'color': colors[i],
-                        'linewidth': 2,
-                        'alpha': 0.8,
-                        'linestyle': linestyles[pair_idx % len(linestyles)]
-                    }
-                    if markers:
-                        plot_kwargs.update({
-                            'marker': 'o',
-                            'markersize': 5,
-                            'markeredgecolor': 'white',
-                            'markeredgewidth': 0.8
-                        })
-                    trace_name = f'{method_name} - {x} vs {y}'
+#                     plot_kwargs = {
+#                         'color': colors[i],
+#                         'linewidth': 2,
+#                         'alpha': 0.8,
+#                         'linestyle': linestyles[pair_idx % len(linestyles)]
+#                     }
+#                     if markers:
+#                         plot_kwargs.update({
+#                             'marker': 'o',
+#                             'markersize': 5,
+#                             'markeredgecolor': 'white',
+#                             'markeredgewidth': 0.8
+#                         })
+#                     trace_name = f'{method_name} - {x} vs {y}'
 
-                    fig.add_trace(go.Scatter(
-                        x=method.gradient[x] + x_shift,
-                        y=method.gradient[y],
-                        mode='lines+markers' if markers else 'lines',
-                        line=dict(color=colors[i], width=2, dash=linestyles[pair_idx % len(linestyles)]),
-                        # marker=dict(color=colors[i], size=5, line=dict(color='white', width=0.8)) if markers else None,
-                        name=trace_name,
-                    ))
-                    toggle_dict['method'][method_name].append(trace_name)
-                    toggle_dict['x+y'][f'{x}+{y}'].append(trace_name)
+#                     fig.add_trace(go.Scatter(
+#                         x=method.gradient[x] + x_shift,
+#                         y=method.gradient[y],
+#                         mode='lines+markers' if markers else 'lines',
+#                         line=dict(color=colors[i], width=2, dash=linestyles[pair_idx % len(linestyles)]),
+#                         # marker=dict(color=colors[i], size=5, line=dict(color='white', width=0.8)) if markers else None,
+#                         name=trace_name,
+#                     ))
+#                     toggle_dict['method'][method_name].append(trace_name)
+#                     toggle_dict['x+y'][f'{x}+{y}'].append(trace_name)
 
-        else:
-            for i, (method_name, sample_dict) in enumerate(methods.items()):
-                for sample_name, method in sample_dict.items():
-                    for pair_idx, (x, y) in enumerate(col_pairs):
-                        if x not in method.gradient.columns:
-                            print(f"Warning: x_col '{x}' not found in method '{method_name}', skipping")
-                            continue
-                        if y not in method.gradient.columns:
-                            print(f"Warning: y_col '{y}' not found in method '{name}', skipping")
-                            continue
+#         else:
+#             for i, (method_name, sample_dict) in enumerate(methods.items()):
+#                 for sample_name, method in sample_dict.items():
+#                     for pair_idx, (x, y) in enumerate(col_pairs):
+#                         if x not in method.gradient.columns:
+#                             print(f"Warning: x_col '{x}' not found in method '{method_name}', skipping")
+#                             continue
+#                         if y not in method.gradient.columns:
+#                             print(f"Warning: y_col '{y}' not found in method '{method_name}', skipping")
+#                             continue
                         
-                        plot_kwargs = {
-                            'color': colors[i],
-                            'linewidth': 2,
-                            'alpha': 0.8,
-                            'linestyle': linestyles[pair_idx % len(linestyles)]
-                        }
-                        if markers:
-                            plot_kwargs.update({
-                                'marker': 'o',
-                                'markersize': 5,
-                                'markeredgecolor': 'white',
-                                'markeredgewidth': 0.8
-                            })
+#                         plot_kwargs = {
+#                             'color': colors[i],
+#                             'linewidth': 2,
+#                             'alpha': 0.8,
+#                             'linestyle': linestyles[pair_idx % len(linestyles)]
+#                         }
+#                         if markers:
+#                             plot_kwargs.update({
+#                                 'marker': 'o',
+#                                 'markersize': 5,
+#                                 'markeredgecolor': 'white',
+#                                 'markeredgewidth': 0.8
+#                             })
                             
-                        trace_name = f"{sample_name} - {method_name} - {x} vs {y}"
+#                         trace_name = f"{sample_name} - {method_name} - {x} vs {y}"
+# s
+#                         fig.add_trace(go.Scatter(
+#                             x=method.gradient[x] + x_shift,
+#                             y=method.gradient[y],
+#                             mode='lines+markers' if markers else 'lines',
+#                             # line=dict(color=colors[i], width=2, dash=linestyles[pair_idx % len(linestyles)]),
+#                             # marker=dict(color=colors[i], size=5, line=dict(color='white', width=0.8)) if markers else None,
+#                             name=trace_name
+#                             ))
 
-                        fig.add_trace(go.Scatter(
-                            x=method.gradient[x] + x_shift,
-                            y=method.gradient[y],
-                            mode='lines+markers' if markers else 'lines',
-                            # line=dict(color=colors[i], width=2, dash=linestyles[pair_idx % len(linestyles)]),
-                            # marker=dict(color=colors[i], size=5, line=dict(color='white', width=0.8)) if markers else None,
-                            name=trace_name
-                            ))
+#                         toggle_dict['method'][method_name].append(trace_name)
+#                         toggle_dict['x+y'][f'{x}+{y}'].append(trace_name)
+#                         toggle_dict['sample'][sample_name].append(trace_name)
 
-                        toggle_dict['method'][method_name].append(trace_name)
-                        toggle_dict['x+y'][f'{x}+{y}'].append(trace_name)
-                        toggle_dict['sample'][sample_name].append(trace_name)
+#         # Build correct visibility toggles for all traces
+#         buttons = []
+#         all_trace_names = [t.name for t in fig.data]
+#         # Default: only the first group is visible, others hidden
+#         default_group = None
+#         for general, trace_dict in toggle_dict.items():
+#             for idx, (trace_name, group_traces) in enumerate(trace_dict.items()):
+#                 visible = [name in group_traces for name in all_trace_names]
+#                 if default_group is None:
+#                     default_group = visible
+#                 buttons.append(dict(
+#                     label=trace_name,
+#                     method='update',
+#                     args=[{'visible': visible}]
+#                 ))
 
-        # Build correct visibility toggles for all traces
-        buttons = []
-        all_trace_names = [t.name for t in fig.data]
-        # Default: only the first group is visible, others hidden
-        default_group = None
-        for general, trace_dict in toggle_dict.items():
-            for idx, (trace_name, group_traces) in enumerate(trace_dict.items()):
-                visible = [name in group_traces for name in all_trace_names]
-                if default_group is None:
-                    default_group = visible
-                buttons.append(dict(
-                    label=trace_name,
-                    method='update',
-                    args=[{'visible': visible}]
-                ))
+#         # Set initial visibility: only first group visible, others hidden
+#         if default_group is not None:
+#             for i, trace in enumerate(fig.data):
+#                 trace.visible = default_group[i]
 
-        # Set initial visibility: only first group visible, others hidden
-        if default_group is not None:
-            for i, trace in enumerate(fig.data):
-                trace.visible = default_group[i]
+#         # Add buttons to the layout, move them outside the plot area
+#         fig.update_layout(
+#             updatemenus=[dict(
+#                 type="buttons",
+#                 direction="down",
+#                 buttons=buttons,
+#                 showactive=True,
+#                 x=1.15,  # move to right of plot
+#                 xanchor="left",
+#                 y=1,
+#                 yanchor="top"
+#             )],
+#             hovermode="x"
+#         )
 
-        # Add buttons to the layout, move them outside the plot area
-        fig.update_layout(
-            updatemenus=[dict(
-                type="buttons",
-                direction="down",
-                buttons=buttons,
-                showactive=True,
-                x=1.15,  # move to right of plot
-                xanchor="left",
-                y=1,
-                yanchor="top"
-            )],
-            hovermode="x"
-        )
-
-        return fig
+#         return fig
 
 
 # Usage example

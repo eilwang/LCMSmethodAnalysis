@@ -1,0 +1,173 @@
+# Column configurations for different analysis levels
+
+levels:
+  precursor:
+    var:
+      - File.Name # entire file path
+      - Run # basename
+    obs:
+      - Precursor.Id
+      - Modified.Sequence
+      - Stripped.Sequence
+      - Precursor.Charge
+      - Lib.Index #TODO: How to align if searching with different libraries? is there any real reason to try to keep this?
+    protein_obs:
+      - Protein.Group # parsimony protein group
+      - Protein.Ids
+      - Protein.Names
+      - All Mapped Proteins
+    non_unique_obs:
+      - Genes
+      - All Mapped Genes
+    layers:
+      - Precursor.Normalised
+      - Precursor.Quantity
+      - IM
+      - iIM
+      - Predicted.IM
+      - Predicted.iIM
+      - Precursor.Mz
+      - Proteotypic
+      - iRT
+      - Predicted.RT
+      - Predicted.iRT
+      - Q.Value # within run FDR
+      - PEP
+      - Global.Q.Value # FDR across all runs reflects MBR; < 0.01 == 1% FDR
+      - Translated.Q.Value
+      - Precursor.Translated
+      - Translated.Quality
+      - Ms1.Translated
+      - Quantity.Quality
+      - RT
+      - RT.Start
+      - RT.Stop
+      - Lib.Q.Value # FDR based on library evidence alone (sample vs libary spectra, better quant if good lib.qval)
+      - Ms1.Profile.Corr
+      - Ms1.Area
+      - Evidence
+      - Spectrum.Similarity
+      - Averagine
+      - Mass.Evidence
+      - CScore
+      - Decoy.Evidence
+      - Decoy.CScore
+      - Fragment.Quant.Raw
+      - Fragment.Quant.Corrected
+      - Fragment.Correlations
+      - MS2.Scan
+      - Fragment.Info
+      - Precursor.FWHM
+      - Precursor.Error.Ppm
+      - Corr.Precursor.Error.Ppm
+      - Data.Points
+      - Ms1.Iso.Corr.Sum
+      - Library.Precursor.Mz
+      - Corrected.Precursor.Mz
+      - Precursor.Calibrated.Mz
+      - Fragment.Calibrated.Mz
+      - Exp.1/K0
+      - Lib.1/K0
+      # - Label.Ratio
+
+    # mod_obs:
+    #   - {residue:mass_shift}
+    #   - {residue:mass_shift} Best Localization
+    #   - {residue:mass_shift} Best Scan
+
+  protein:
+    var:
+      - File.Name # entire file path
+      - Run # basename
+    obs:
+      - Protein.Group # most likely set of proteins including parsimony
+      - Protein.Ids # all proteins containing the peptide
+      - Protein.Names
+      - Genes
+
+    pr_obs:
+      - Modified.Sequence
+      - Stripped.Sequence
+      - Precursor.Id
+    layers:
+      - PG.MaxLFQ
+      - PG.Quantity
+      - PG.Normalised
+      - Lib.PG.Q.Value
+      - Protein.Q.Value
+      - Global.PG.Q.Value
+      - PG.Q.Value
+
+  gene:
+    obs:
+      - Genes
+      
+    var:
+      - File.Name # entire file path
+      - Run # basename
+    layers:
+      - Genes.MaxLFQ
+      - Genes.Quantity
+      - Genes.Normalised
+      - Genes.MaxLFQ.Unique
+      - GG.Q.Value
+
+
+# Additional columns reference (commented out)
+# File.Name
+# Run
+# Protein.Group
+# Protein.Ids
+# Protein.Names
+# Genes
+# PG.Quantity
+# PG.Normalised
+# Genes.Quantity
+# Genes.Normalised
+# Genes.MaxLFQ
+# Genes.MaxLFQ.Unique
+# PG.MaxLFQ
+# Modified.Sequence
+# Stripped.Sequence
+# Precursor.Id
+# Precursor.Charge
+# Q.Value
+# Protein.Q.Value
+# PG.Q.Value
+# GG.Q.Value
+# Proteotypic
+# Precursor.Quantity
+# Precursor.Normalised
+# Quantity.Quality
+# RT
+# RT.Start
+# RT.Stop
+# iRT
+# Predicted.RT
+# Predicted.iRT
+# First.Protein.Description
+# Lib.Q.Value
+# Ms1.Profile.Corr
+# Ms1.Corr.Sum
+# Ms1.Area
+# Evidence
+# CScore
+# Decoy.Evidence
+# Decoy.CScore
+# Fragment.Quant.Raw
+# Fragment.Quant.Corrected
+# Fragment.Correlations
+# MS2.Scan
+# Precursor.FWHM
+# Precursor.Error.Ppm
+# Corr.Precursor.Error.Ppm
+# Data.Points
+# Ms1.Iso.Corr.Sum
+# Library.Precursor.Mz
+# Corrected.Precursor.Mz
+# Fragment.Info
+# Precursor.Calibrated.Mz
+# Fragment.Calibrated.Mz
+# Exp.1/K0
+# Lib.1/K0
+# Label.Ratio

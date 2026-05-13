@@ -1,0 +1,41 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "parsers", "parsers", "{030BDAB6-1E7F-51D8-592F-72D10570CE55}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "vneometh", "vneometh", "{937833F5-FCAD-D4A9-15D5-131504808CD0}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "extractor", "extractor", "{B3A046AE-4213-F093-3670-616A22FD6055}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "thermo_dlls", "thermo_dlls", "{43A26AB3-E754-A6E0-6EC9-C26AAD21302E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "extract_pressure_dotnet", "src\parsers\vneometh\extractor\thermo_dlls\extract_pressure_dotnet\extract_pressure_dotnet.csproj", "{5D82D717-5B9F-9663-8FC7-53DAC52C15A7}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5D82D717-5B9F-9663-8FC7-53DAC52C15A7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5D82D717-5B9F-9663-8FC7-53DAC52C15A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5D82D717-5B9F-9663-8FC7-53DAC52C15A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5D82D717-5B9F-9663-8FC7-53DAC52C15A7}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{030BDAB6-1E7F-51D8-592F-72D10570CE55} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{937833F5-FCAD-D4A9-15D5-131504808CD0} = {030BDAB6-1E7F-51D8-592F-72D10570CE55}
+		{B3A046AE-4213-F093-3670-616A22FD6055} = {937833F5-FCAD-D4A9-15D5-131504808CD0}
+		{43A26AB3-E754-A6E0-6EC9-C26AAD21302E} = {B3A046AE-4213-F093-3670-616A22FD6055}
+		{5D82D717-5B9F-9663-8FC7-53DAC52C15A7} = {43A26AB3-E754-A6E0-6EC9-C26AAD21302E}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {6F2CAA52-5C60-47B2-9D90-E77661393E34}
+	EndGlobalSection
+EndGlobal

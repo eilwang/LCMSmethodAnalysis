@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "55Lkj0jAPmY=",
+  "success": true,
+  "projectFilePath": "/hpc/projects/mass_spec/eileenwang/MethodOpt/LCMSmethodAnalysis/src/parsers/vneometh/extractor/thermo_dlls/extract_pressure_dotnet/extract_pressure_dotnet.csproj",
+  "expectedPackageFiles": [
+    "/home/eileen.wang/.nuget/packages/microsoft.netcore.app.host.linux-x64/6.0.36/microsoft.netcore.app.host.linux-x64.6.0.36.nupkg.sha512"
+  ],
+  "logs": []
+}
