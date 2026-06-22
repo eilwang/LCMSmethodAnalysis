@@ -21,7 +21,7 @@ import warnings
 import sys
 from datetime import datetime
 import logging
-from .bps_loader import BPSLoader
+from .search_loader import BPSLoader
 import zipfile
 import os
 
@@ -414,11 +414,13 @@ class BPSCollection:
         if results_data:
             if 'bps' in self.search_type:
                 print(1)
-                self._log(f"\n📊 Summary: Found {len(results_data)} total samples")
+                self._log(f"\n Summary: Found {len(results_data)} total samples")
                 self._log(f"   UUIDs/samples: {list(results_data.keys())}")
             elif 'fragpipe_diann' in self.search_type:
-                self._log(f"\n📊 Summary: Found {len(results_data.keys())} FragPipe-DIA-NN report.tsv")
+                self._log(f"\n Summary: Found {len(results_data.keys())} FragPipe-DIA-NN report.tsv")
                 self._log(f"   Samples: {np.sum([len(results_data[n]['File.Name'].unique()) for n in results_data.keys()])}")
+
+                self._log()
         else:
             self._log(f"\n⚠ No data found for search_type '{self.search_type}'")
                     

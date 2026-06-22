@@ -5,7 +5,7 @@ from typing import Optional, Tuple, Union
 import seaborn as sns
 import matplotlib.pyplot as plt
 import anndata as ad
-from .bps_collection import BPSCollection
+from .search_collection import BPSCollection
 
 def bin(array, bin_width=15):
     bins = np.arange(0, np.nanmax(array) + bin_width, bin_width)
