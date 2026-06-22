@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union
 import numpy as np
 
-from ..bps.bps_collection import BPSCollection
+from ..search.search_collection import BPSCollection
 from .vneo_method import VNeoMethod
 import zipfile
 import tempfile

@@ -5,14 +5,14 @@ from typing import Optional, Tuple, Union
 import seaborn as sns
 import matplotlib.pyplot as plt
 import anndata as ad
-from .search_collection import BPSCollection
+from .search_collection import SearchCollection
 
 def bin(array, bin_width=15):
     bins = np.arange(0, np.nanmax(array) + bin_width, bin_width)
     labels = [float(b) for b in bins[:-1]]
     return pd.cut(array, bins=bins, labels=labels, right=False, ordered=False)
 
-def rtdist(dc: BPSCollection,
+def rtdist(dc: SearchCollection,
          sample_name: str,
          binwidth: Optional[float],
          ax: Optional[plt.Axes] = None,

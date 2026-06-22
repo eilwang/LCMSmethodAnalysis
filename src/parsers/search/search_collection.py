@@ -21,12 +21,12 @@ import warnings
 import sys
 from datetime import datetime
 import logging
-from .search_loader import BPSLoader
+from .search_loader import SearchLoader
 import zipfile
 import os
 
 
-class BPSCollection:
+class SearchCollection:
     """
     Collection object for managing multiple DIA-NN search results.
 
@@ -36,7 +36,7 @@ class BPSCollection:
 
     def __init__(self, search_type: str = 'bps_diann', config_path: Optional[str] = None, log_file: Optional[str] = None):
         """
-        Initialize BPS collection.
+        Initialize SearchCollection.
 
         Parameters:
         -----------
@@ -60,7 +60,7 @@ class BPSCollection:
             module_dir = os.path.dirname(os.path.abspath(__file__))
             config_path = os.path.join(module_dir, config_path)
 
-        self.loader = BPSLoader(search_type=search_type, config_path=config_path)
+        self.loader = SearchLoader(search_type=search_type, config_path=config_path)
         # Store as dict: {level: AnnData} where each AnnData contains all samples
         self.data: Dict[str, ad.AnnData] = {}
         self.temp_dirs: List[str] = []
@@ -137,10 +137,10 @@ class BPSCollection:
             self.log_handle.close()
             self.log_handle = None
 
-    def _load_bps_diann_export(self, bps_export_path_obj, target_uuids=None, verbose=False):
+    def _load_bps_diann_export(self, search_export_path_obj, target_uuids=None, verbose=False):
         results = {}
 
-        with zipfile.ZipFile(bps_export_path_obj, 'r') as export_zip:
+        with zipfile.ZipFile(search_export_path_obj, 'r') as export_zip:
             # Get all entries in the zip file
             all_paths = export_zip.namelist()
             all_result_zips = [i for i in all_paths if 'tims-diann.result.zip' in i]
@@ -821,7 +821,11 @@ class BPSCollection:
             raise ValueError(f"Unsupported file format: {filepath_obj.suffix}. Use .pkl or .h5ad")
 
     @classmethod
-    def from_file(cls, filepath: str, search_type: str = "bps_diann", config_path: Optional[str] = None) -> 'BPSCollection':
+    def from_file(cls,
+                   filepath: str, 
+                   search_type: str = "bps_diann", 
+                   config_path: Optional[str] = None
+                   ) -> SearchCollection:
         """
         Load collection from file.
 
@@ -836,7 +840,7 @@ class BPSCollection:
 
         Returns:
         --------
-        BPSCollection
+        SearchCollection
             Loaded collection
         """
 
@@ -899,7 +903,7 @@ class BPSCollection:
     def __repr__(self) -> str:
         """String representation of collection."""
         levels = list(self.data.keys())
-        return f"BPSCollection(levels={levels})"
+        return f"SearchCollection(levels={levels})"
 
     def __enter__(self):
         """Context manager entry."""

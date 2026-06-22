@@ -12,7 +12,7 @@ from scipy.sparse import csr_matrix
 # Set up logger for this module
 logger = logging.getLogger(__name__)
 
-class BPSLoader:
+class SearchLoader:
     def __init__(self, search_type: str = 'bps_diann', config_path: Optional[str] = None):
         """Initialize with DIA-NN/Spectronaut column configuration file."""
         # If config_path is relative, resolve it relative to this module's directory
