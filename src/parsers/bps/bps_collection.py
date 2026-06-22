@@ -93,7 +93,7 @@ class BPSCollection:
             warnings_logger.propagate = False
 
     
-    def _log(self, message: str, to_stdout: bool = None):
+    def _log(self, message: str, to_stdout: Optional[bool] = None):
         """
         Log a message to log file and optionally stdout.
 
@@ -256,19 +256,18 @@ class BPSCollection:
                 except Exception as e:
                     self._log(f"Error processing BPS zip {p}: {e}")
 
-        elif 'fragpipe' in self.search_type:
+        elif 'fragpipe_diann' in self.search_type:
             if p.is_dir():
                 # Use _load_fragpipe_diann for directory
                 try:
                     fragpipe_results = self._load_fragpipe_diann(p)
                     
-                    # Filter by metadata if provided
-                    if target_uuids is not None:
-                        fragpipe_results = {
-                            k: v for k, v in fragpipe_results.items() 
-                            if k in target_uuids
-                        }
-                    
+                    # # Filter by metadata if provided
+                    # if target_uuids is not None:
+                    #     fragpipe_results = {
+                    #         k: v for k, v in fragpipe_results.items() 
+                    #         if k in target_uuids
+                    #     }
                     results_data.update(fragpipe_results)
                 except Exception as e:
                     self._log(f"Error processing FragPipe directory {p}: {e}")
@@ -409,14 +408,19 @@ class BPSCollection:
                     self._log(f"Error processing Spectronaut zip {p}: {e}")
 
         else:
-            raise ValueError(f"Unknown search_type: {self.search_type}. Must be 'bps_diann', 'bps_spectronaut', or 'fragpipe'")
+            raise ValueError(f"Unknown search_type: {self.search_type}. Must be 'bps_diann', 'bps_spectronaut', or 'fragpipe_diann'")
         
         # Report summary of what was found
         if results_data:
-            self._log(f"\n📊 Summary: Found {len(results_data)} total samples")
-            self._log(f"   UUIDs/samples: {list(results_data.keys())}")
+            if 'bps' in self.search_type:
+                print(1)
+                self._log(f"\n📊 Summary: Found {len(results_data)} total samples")
+                self._log(f"   UUIDs/samples: {list(results_data.keys())}")
+            elif 'fragpipe_diann' in self.search_type:
+                self._log(f"\n📊 Summary: Found {len(results_data.keys())} FragPipe-DIA-NN report.tsv")
+                self._log(f"   Samples: {np.sum([len(results_data[n]['File.Name'].unique()) for n in results_data.keys()])}")
         else:
-            self._log(f"\n⚠ No data found for search_type '{search_type}'")
+            self._log(f"\n⚠ No data found for search_type '{self.search_type}'")
                     
         return results_data
 
