@@ -11,7 +11,7 @@ levels:
       - ptm_locations
       - precursor_mz
       - precursor_charge
-    protein_obs:
+    pg_obs:
       - protein_group_parent_id
       - protein_group_name
     layers:
@@ -52,12 +52,13 @@ levels:
       - protein_accession
       - protein_name
       - gene_id
-    layers:
-      - g_quantity
-      - pg_q_value
+    pr_obs:
       - number_precursors
       - number_peptides
       - number_stripped_peptides
+    layers:
+      - g_quantity
+      - pg_q_value
       - pg_quantity_ms1
       - pg_quantity_ms2
       - pg_cv

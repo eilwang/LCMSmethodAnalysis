@@ -146,7 +146,7 @@ class BPSLoader:
         for level in self.config['levels'].keys():
             # Determine which sections to check
             if sections is None:
-                check_sections = [s for s in ['var_name', 'obs_name', 'x', 'var', 'obs', 'layers', 'pr_obs']
+                check_sections = [s for s in ['var_name', 'obs_name', 'x', 'var', 'obs', 'layers', 'pr_obs', 'pg_obs']
                            if s in self.config['levels'][level]]
             else:
                 check_sections = sections
@@ -201,7 +201,7 @@ class BPSLoader:
 
         # Determine which sections to load
         if sections is None:
-            sections = [s for s in ['var_name', 'obs_name', 'x', 'var', 'obs', 'layers', 'pr_obs']
+            sections = [s for s in ['var_name', 'obs_name', 'x', 'var', 'obs', 'layers', 'pr_obs', 'pg_obs']
                        if s in self.config['levels'][level]]
 
         # Get expected columns and remove duplicates while preserving order
@@ -381,9 +381,24 @@ class BPSLoader:
 
         obs, obs_name = self.get_valid_cols(df, level_config, 'obs')
 
-        layers, x = self.get_valid_cols(df, level_config, 'layers')
 
-        logger.info(f"Using '{x}' as X layer")
+        # Add pr_obs and pg_obs as layers if present in config
+        try:
+            pr_obs_layers, _ = self.get_valid_cols(df, level_config, 'pr_obs')
+        except Exception:
+            pr_obs_layers = []
+        try:
+            pg_obs_layers, _ = self.get_valid_cols(df, level_config, 'pg_obs')
+        except Exception:
+            pg_obs_layers = []
+
+        layers, x = self.get_valid_cols(df, level_config, 'layers')
+        extra_layers = pr_obs_layers + pg_obs_layers
+        if extra_layers:
+            layers += extra_layers
+            logger.info(f"Using '{x}' as X layer and additional layers: {extra_layers}")
+        else:
+            logger.info(f"Using '{x}' as X layer (no pr_obs/pg_obs layers found)")
 
         # Create unique IDs to handle duplicates by preserving all data instead of aggregating
         df_copy = df.copy()

@@ -8,10 +8,10 @@ levels:
     obs:
       - Precursor.Id
       - Modified.Sequence
-      - Stripped.Sequence
+      
       - Precursor.Charge
       - Lib.Index #TODO: How to align if searching with different libraries? is there any real reason to try to keep this?
-    protein_obs:
+    pg_obs:
       - Protein.Group # parsimony protein group
       - Protein.Ids
       - Protein.Names

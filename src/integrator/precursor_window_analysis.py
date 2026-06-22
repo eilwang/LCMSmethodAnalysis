@@ -115,7 +115,7 @@ def analyze_sample_coverage(
 
 
     # Check each precursor
-    sample_df.loc[:, ['in_window', 'window_id']] = sample_df.apply(lambda row: check_precursor_in_windows(row[mz], row[im], dia_windows), axis=1, result_type='expand')
+    sample_df[['in_window', 'window_id']] = sample_df.apply(lambda row: check_precursor_in_windows(row[mz], row[im], dia_windows), axis=1, result_type='expand')
     sample_df['distance_to_nearest'] = sample_df.apply(lambda row: calculate_distance_to_nearest_window(row[mz], row[im], dia_windows) if not row['in_window'] else 0.0, axis=1)
         # result = {
         #     'precursor_idx': i,
