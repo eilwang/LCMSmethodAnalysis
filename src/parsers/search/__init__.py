@@ -1,10 +1,10 @@
-# DIA-NN data handling
-from .search_loader import BPSLoader
-# DiannCollection imports DiannLoader, so import DiannLoader first
+# Search data handling (DIA-NN, Spectronaut, etc.)
+from .search_loader import SearchLoader
+# Import SearchCollection with fallback for missing dependencies
 try:
-    from .search_collection import BPSCollection
+    from .search_collection import SearchCollection
 except ImportError:
-    # If diann_collection has import issues, create a placeholder
-    BPSCollection = None
+    # If search_collection has import issues, create a placeholder
+    SearchCollection = None
 
-__all__ = ['BPSLoader', 'BPSCollection']
+__all__ = ['SearchLoader', 'SearchCollection']
