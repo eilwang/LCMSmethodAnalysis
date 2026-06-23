@@ -419,8 +419,6 @@ class SearchCollection:
             elif 'fragpipe_diann' in self.search_type:
                 self._log(f"\n Summary: Found {len(results_data.keys())} FragPipe-DIA-NN report.tsv")
                 self._log(f"   Samples: {np.sum([len(results_data[n]['File.Name'].unique()) for n in results_data.keys()])}")
-
-                self._log()
         else:
             self._log(f"\n⚠ No data found for search_type '{self.search_type}'")
                     
@@ -825,7 +823,7 @@ class SearchCollection:
                    filepath: str, 
                    search_type: str = "bps_diann", 
                    config_path: Optional[str] = None
-                   ) -> SearchCollection:
+                   ):
         """
         Load collection from file.
 
