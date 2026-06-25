@@ -1,6 +1,6 @@
 import pandas as pd
 import yaml
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union
 import warnings
 import anndata as ad
 import numpy as np
@@ -168,13 +168,37 @@ class SearchLoader:
             }
 
         return results
+    
+    def load_search(
+            self, 
+            filepath: str
+    ) -> pd.DataFrame:
+        """
+        Load search data from a file into a DataFrame.
 
-    def load_to_df(
+        Parameters:
+        -----------
+        filepath : str
+            Path to search data file
+
+        Returns:
+        --------
+        pd.DataFrame
+            DataFrame containing the search data
+            """
+        if "diann" in self.search_type:
+            df = pd.read_csv(filepath, sep='\t')
+        else:
+            df = pd.read_parquet(filepath)
+        return df
+
+    def load_to_level_df(
         self,
-        filepath: str,
+        data: Union[str, pd.DataFrame],
         level: str,
         sections: Optional[List[str]] = None,
-        strict: bool = False
+        strict: bool = False,
+        source_path: Optional[str] = None
     ) -> pd.DataFrame:
         """
         Load DIA-NN data with column selection based on level.
@@ -188,16 +212,27 @@ class SearchLoader:
         sections : List[str], optional
             Specific sections to include (var_name, obs_name, x, var, obs, layers)
             If None, includes all sections except layers (unless include_layers=True)
-        include_layers : bool
-            If True, include layer columns
         strict : bool
             If True, raise error if expected columns are missing
+        source_path : str, optional
+            Original source path (e.g., zip file path) to track in metadata.
+            If None, uses filepath as source.
 
         Returns:
         --------
         pd.DataFrame
             DataFrame with selected columns
         """
+        # Load full dataframe
+        if isinstance(data, str):
+            df = self.load_search(data)
+        elif isinstance(data, pd.DataFrame):
+            df = data.copy()
+        else:
+            raise ValueError(f"Data must be either a file path (str) or pandas DataFrame, got {type(data)}")
+
+        if level == 'none':
+            return df
 
         # Determine which sections to load
         if sections is None:
@@ -208,12 +243,6 @@ class SearchLoader:
         expected_cols_raw = self.get_columns(level, sections)
         # Use dict.fromkeys() to preserve order while removing duplicates
         expected_cols = list(dict.fromkeys(expected_cols_raw))
-
-        # Load full dataframe
-        if "diann" in self.search_type:
-            df = pd.read_csv(filepath, sep='\t')
-        else:
-            df = pd.read_parquet(filepath)
 
         # Check for missing columns
         missing_cols = set(expected_cols) - set(df.columns)
@@ -282,7 +311,14 @@ class SearchLoader:
 
             #keep multindex to use for pivot table later, removes need to respecify columns
             result = result.groupby(valid_groupby_cols).agg(**agg_dict).reset_index()
+            
+            # Add search_path after aggregation to avoid it being included in aggregation warnings
+            result['search_path'] = source_path if source_path else os.path.abspath(filepath)
+        else:
+            # For non-protein/gene levels, add search_path normally
+            result['search_path'] = source_path if source_path else os.path.abspath(filepath)
 
+        # Add run and index information
         if self.search_type == 'fragpipe_diann':
             result['Run'] = result['File.Name'].apply(lambda x: os.path.splitext(os.path.basename(x))[0])
             result['hystar_index'] = result['Run'].str.extract(r'.+_(\d+)', expand=False)
@@ -355,12 +391,13 @@ class SearchLoader:
             AnnData object with selected columns
         """
         if isinstance(data, str):
-            df = self.load_to_df(
+            df = self.load_to_level_df(
                     data,
                     level,
                     sections,
                     strict
             )
+
         elif isinstance(data, pd.DataFrame):
             df = data
         else:
@@ -373,6 +410,8 @@ class SearchLoader:
         
         # Only add these columns if they exist in the DataFrame
         additional_vars = []
+        if 'search_path' in df.columns:
+            additional_vars.append('search_path')
         if 'search_type' in df.columns:
             additional_vars.append('search_type')
         if 'hystar_index' in df.columns:
@@ -402,6 +441,36 @@ class SearchLoader:
 
         # Create unique IDs to handle duplicates by preserving all data instead of aggregating
         df_copy = df.copy()
+        
+        # Handle duplicate var_names from different search_paths
+        # If same var_name exists with different search_paths, make var_names unique
+        if 'search_path' in df_copy.columns and var_name in df_copy.columns:
+            # Check if there are duplicate var_names with different search_paths
+            var_search_groups = df_copy.groupby(var_name)['search_path'].nunique()
+            has_multiple_sources = (var_search_groups > 1).any()
+            
+            # Also check if there are multiple search paths in the dataset
+            multiple_search_paths = df_copy['search_path'].nunique() > 1
+            
+            if has_multiple_sources or multiple_search_paths:
+                # Create a search_path_index for each unique search_path
+                unique_search_paths = df_copy['search_path'].unique()
+                search_path_to_index = {path: idx for idx, path in enumerate(unique_search_paths)}
+                df_copy['search_path_index'] = df_copy['search_path'].map(search_path_to_index)
+                
+                # Make var_names unique by appending search_path_index
+                df_copy[f'{var_name}_unique'] = df_copy[var_name].astype(str) + '_sp' + df_copy['search_path_index'].astype(str)
+                
+                # Replace var_name in the var list with the unique version
+                var_name_idx = var.index(var_name)
+                var[var_name_idx] = f'{var_name}_unique'
+                var_name = f'{var_name}_unique'
+                
+                # Add search_path_index to var list if not already there
+                if 'search_path_index' not in var:
+                    var.append('search_path_index')
+                
+                logger.info(f"Found {len(unique_search_paths)} unique search paths. Created search_path_index and unique var_names.")
         
         # Convert columns to strings to ensure they are hashable for groupby operations
         groupby_cols = obs + var
