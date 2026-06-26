@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from parsers.diann.diann_collection import DiannCollection
 from typing import Optional, Tuple, Union
 import seaborn as sns
 import matplotlib.pyplot as plt

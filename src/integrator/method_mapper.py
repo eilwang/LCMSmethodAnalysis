@@ -1,7 +1,7 @@
 from logging import warning
 
 import pandas as pd
-from src.parsers.search.search_collection import BPSCollection
+from src.parsers.search.search_collection import SearchCollection
 from typing import Dict, Optional, Union
 
 from parsers.vneometh.lc_method_collection import VNeoMethodCollection

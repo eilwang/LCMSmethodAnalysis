@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union
 import numpy as np
 
-from ..search.search_collection import BPSCollection
+from ..search.search_collection import SearchCollection
 from .vneo_method import VNeoMethod
 import zipfile
 import tempfile
@@ -899,7 +899,7 @@ class VNeoMethodCollection:
         return copy.deepcopy(self)
     
     def bulk_adjust_gradients(self, 
-        searchcollection: BPSCollection,
+        searchcollection: SearchCollection,
         samples: Optional[list[str]] = None,
         lcmethods: Optional[list[str]] = None,
         extrapolate_points: Optional[list] = None,
@@ -914,7 +914,7 @@ class VNeoMethodCollection:
 
         Parameters:
         -----------
-        searchcollection : BPSCollection
+        searchcollection : SearchCollection
             Collection containing reference gradient profiles to match against
         samples : Optional[list[str]]
             List of specific samples to process

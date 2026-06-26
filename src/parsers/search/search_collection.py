@@ -65,6 +65,7 @@ class SearchCollection:
         # Store as dict: {level: AnnData} where each AnnData contains all samples
         self.data: Dict[str, ad.AnnData] = {}
         self.temp_dirs: List[str] = []
+        self.search_index: Dict[str, int] = {}
 
         # Set up logging
         self.log_file = log_file
@@ -447,7 +448,7 @@ class SearchCollection:
         levels: Optional[List[str]] = None,
         metadata: Optional[pd.DataFrame] = None,
         verbose: bool = False
-    ):
+    ) -> Dict[str, str]:
         """
         Load search results from a folder or zip and add to collection.
 
@@ -487,7 +488,7 @@ class SearchCollection:
             self._log(f"⚠ No results found in {len(paths)} path(s) for search_type='{self.search_type}'", to_stdout=verbose)
             self._log(f"  Expected structure: {expected_structure.get(self.search_type, 'unknown')}", to_stdout=verbose)
             self._log(f"  Continuing with empty collection...", to_stdout=verbose)
-            return
+            return all_results_data
 
         self._log(f"Found {len(all_results_data)} result samples ({self.search_type} format)", to_stdout=verbose)
         
@@ -499,7 +500,7 @@ class SearchCollection:
                 self._log(f"Successfully found {len(found_uuids)} searches from metadata", to_stdout=verbose)
             if missing_uuids:
                 self._log(f"Warning: {len(missing_uuids)} searches from metadata not found: {missing_uuids}", to_stdout=verbose)
-                
+
         return all_results_data
 
     def add_searches(
@@ -531,57 +532,24 @@ class SearchCollection:
             This allows loading only specific searches from large zip files instead of 
             extracting everything.
         """
-        # Convert single path to list for uniform handling
-        paths = paths if isinstance(paths, list) else [paths]
-        
-        # Get target UUIDs if metadata is provided
-        target_uuids = None
-        if metadata is not None and 'processing_run_uuid' in metadata.columns:
-            target_uuids = set(metadata['processing_run_uuid'].dropna().unique())
-        
-        all_results_data = {}
-        for p in paths:
-            search_path = self._get_search_path(p)
-            results_data = self._find_results_files(search_path, metadata=metadata, levels=levels)
-            all_results_data.update(results_data)
-
-        if not all_results_data:
-            expected_structure = {
-                'bps_diann': 'tims-diann.result/results.tsv',
-                'bps_spectronaut': 'spectronaut-id.peptide.parquet / spectronaut-id.protein.parquet',
-                'fragpipe': 'sample/diann-output/report.tsv'
-            }
-            self._log(f"⚠ No results found in {len(paths)} path(s) for search_type='{self.search_type}'", to_stdout=verbose)
-            self._log(f"  Expected structure: {expected_structure.get(self.search_type, 'unknown')}", to_stdout=verbose)
-            self._log(f"  Continuing with empty collection...", to_stdout=verbose)
-            return
-
-        self._log(f"Found {len(all_results_data)} result samples ({self.search_type} format)", to_stdout=verbose)
-        
-        # Log which UUIDs were found if metadata filtering was used
-        if target_uuids is not None:
-            found_uuids = set(all_results_data.keys())
-            missing_uuids = target_uuids - found_uuids
-            if found_uuids:
-                self._log(f"Successfully found {len(found_uuids)} searches from metadata", to_stdout=verbose)
-            if missing_uuids:
-                self._log(f"Warning: {len(missing_uuids)} searches from metadata not found: {missing_uuids}", to_stdout=verbose)
+        all_results_data = self._find_all_results_files(paths, levels=levels, metadata=metadata, verbose=verbose)
 
         # Determine which levels to load
         if levels is None:
             levels = list(self.loader.config['levels'].keys())
-
-        # Temporary storage for sample AnnData objects before concatenation
-        level_samples: Dict[str, List[ad.AnnData]] = {level: [] for level in levels}
+        else:
+            # Temporary storage for sample AnnData objects before concatenation
+            level_samples: Dict[str, List[ad.AnnData]] = {level: [] for level in levels}
 
         # Process each results dataframe
-        for uuid, results_df in all_results_data.items():
-            self._log(f"\nProcessing {uuid}", to_stdout=verbose)
+        for search_id, data_path in all_results_data.items():
+            # search_id is the uuid for bps files and search path for fragpipe files
+            self._log(f"\nProcessing {search_id}", to_stdout=verbose)
             
             # For Spectronaut data, process DataFrame directly without TSV conversion
             if 'spectronaut' in self.search_type:
                 # Extract the level type from the UUID (peptide or protein)
-                level_type = 'peptide' if '_peptide' in uuid else 'protein'
+                level_type = 'peptide' if '_peptide' in search_id else 'protein'
                 
                 # Only process if this level is requested
                 if level_type not in levels:
@@ -599,10 +567,10 @@ class SearchCollection:
                     if not strict:
                         self._log(f"⚠ Could not load {level_type} level: \n{e}", to_stdout=verbose)
                     else:
-                        self._log(f"Error loading {uuid} at {level_type} level: {e}", to_stdout=verbose)
+                        self._log(f"Error loading {search_id} at {level_type} level: {e}", to_stdout=verbose)
                     continue
                     
-            else:
+            elif 'diann' in self.search_type:
                 # For DIA-NN data, use the original TSV-based approach
                 temp_path = None
                 # Extract source path if available, then remove the temporary column from a copy
@@ -624,7 +592,7 @@ class SearchCollection:
                     )
                     
                     if verbose:
-                        self._log(f"  Available levels for {uuid}: {list(available_levels.keys())}", to_stdout=verbose)
+                        self._log(f"  Available levels for {search_id}: {list(available_levels.keys())}", to_stdout=verbose)
                         self._log(f"  Requested levels: {levels}", to_stdout=verbose)
 
                     # Try to load each requested level
@@ -643,10 +611,6 @@ class SearchCollection:
                                 source_path=source_path
                             )
 
-                            # Add sample UUID/name to df (only for non-Spectronaut data)
-                            # if 'spectronaut' not in self.search_type:
-                            #     df['UUID'] = uuid
-
                             # Add to temporary list for concatenation
                             level_samples[level].append(df)
 
@@ -658,12 +622,12 @@ class SearchCollection:
                             if not strict:
                                 self._log(f"⚠ Could not load {level} level: \n{e}", to_stdout=verbose)
                             else:
-                                self._log(f"Error loading {uuid} at {level} level: {e}", to_stdout=verbose)
+                                self._log(f"Error loading {search_id} at {level} level: {e}", to_stdout=verbose)
                                 break
                             continue
                             
                 except Exception as e:
-                    self._log(f"⚠ Error processing {uuid}: {e}")
+                    self._log(f"⚠ Error processing {search_id}: {e}")
                 finally:
                     # Clean up temp file
                     if temp_path:

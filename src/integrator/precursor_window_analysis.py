@@ -348,12 +348,12 @@ if __name__ == "__main__":
     from diann_collection import DiannCollection
     from ms_method_collection import MSMethodCollection
 
-    bpscollection = DiannCollection.from_file("path/to/collection.pkl")
+    searchcollection = DiannCollection.from_file("path/to/collection.pkl")
     mscollection = MSMethodCollection()
     mscollection.add_methods_from_folder("path/to/methods")
 
     # 2. Analyze a single sample
-    sample_adata = bpscollection.data['precursor'][:, 'sample_name']
+    sample_adata = searchcollection.data['precursor'][:, 'sample_name']
     dia_windows = mscollection['method_name'].get_dia_windows()
 
     coverage_df = analyze_sample_coverage(sample_adata, dia_windows)
@@ -364,7 +364,7 @@ if __name__ == "__main__":
 
     # 3. Compare across all samples
     comparison = compare_coverage_across_samples(
-        bpscollection,
+        searchcollection,
         mscollection,
         ms_method_var='ms meth'
     )
