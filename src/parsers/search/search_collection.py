@@ -412,9 +412,6 @@ class SearchCollection:
                         df['file_type'] = file_type
                         return df
                     return pd.DataFrame()
-                else:
-                    # Unknown search type for zip file
-                    return pd.DataFrame()
             elif file_path.endswith('.parquet'):
                 # Read parquet file
                 df = pd.read_parquet(file_path)
@@ -433,6 +430,151 @@ class SearchCollection:
         except Exception as e:
             self._log(f"Error reading {file_path}: {e}")
             return pd.DataFrame()
+
+    def _load_raw_result_dfs(
+        self,
+        file_paths: Dict[str, str],
+        verbose: bool = False
+    ) -> Dict[str, pd.DataFrame]:
+        """
+        Load raw result files without level-specific transformation.
+        
+        Parameters:
+        -----------
+        file_paths : Dict[str, str]
+            Dictionary mapping sample IDs to file paths
+        verbose : bool
+            Whether to log verbose output
+        
+        Returns:
+        --------
+        Dict[str, pd.DataFrame]
+            Dictionary mapping sample IDs to raw DataFrames
+        """
+        raw_dfs = {}
+        
+        for sample_id, file_path in file_paths.items():
+            self._log(f"\nLoading {sample_id}", to_stdout=verbose)
+            
+            # Read raw file
+            results_df = self._read_raw_result_file(file_path, sample_id)
+            
+            if results_df.empty:
+                self._log(f"⚠ Empty data for {sample_id}", to_stdout=verbose)
+                continue
+            
+            raw_dfs[sample_id] = results_df
+            self._log(f"  ✓ Loaded: {results_df.shape}", to_stdout=verbose)
+        
+        return raw_dfs
+
+    def _transform_raw_dfs_by_level(
+        self,
+        raw_dfs: Dict[str, pd.DataFrame],
+        levels: List[str],
+        sections: Optional[List[str]] = None,
+        strict: bool = False,
+        verbose: bool = False
+    ) -> Dict[str, List[pd.DataFrame]]:
+        """
+        Transform raw result DataFrames into level-specific DataFrames.
+        For Spectronaut, raw files are already level-specific.
+        For DIA-NN, raw files contain all levels mixed and need to be split.
+        
+        Parameters:
+        -----------
+        raw_dfs : Dict[str, pd.DataFrame]
+            Dictionary mapping sample IDs to raw DataFrames
+        levels : List[str]
+            Levels to extract (precursor, protein, gene, peptide)
+        sections : List[str], optional
+            Specific sections to include
+        strict : bool
+            If True, raise error if expected columns are missing
+        verbose : bool
+            Whether to log verbose output
+        
+        Returns:
+        --------
+        Dict[str, List[pd.DataFrame]]
+            Dictionary mapping levels to lists of DataFrames
+        """
+        # Initialize storage for each level
+        level_dfs: Dict[str, List[pd.DataFrame]] = {level: [] for level in levels}
+        
+        for sample_id, results_df in raw_dfs.items():
+            self._log(f"\nTransforming {sample_id} by level", to_stdout=verbose)
+            
+            # For Spectronaut data, DataFrame is already at the correct level
+            if 'spectronaut' in self.search_type:
+                level_type = 'peptide' if '_peptide' in sample_id else 'protein'
+                
+                if level_type not in levels:
+                    continue
+                    
+                try:
+                    self._log(f"  {level_type} level...", to_stdout=verbose)
+                    level_dfs[level_type].append(results_df)
+                    self._log(f"    ✓ {level_type}: {results_df.shape}", to_stdout=verbose)
+                except Exception as e:
+                    if not strict:
+                        self._log(f"⚠ Could not process {level_type} level: \n{e}", to_stdout=verbose)
+                    else:
+                        raise
+                    
+            elif 'diann' in self.search_type:
+                # For DIA-NN data, split the raw DataFrame by level
+                temp_path = None
+                source_path = None
+                df_to_write = results_df
+                
+                if '_source_zip' in results_df.columns:
+                    source_path = results_df['_source_zip'].iloc[0] if len(results_df) > 0 else None
+                    df_to_write = results_df.drop(columns=['_source_zip'])
+                    
+                try:
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.tsv', delete=False) as temp_file:
+                        df_to_write.to_csv(temp_file.name, sep='\t', index=False)
+                        temp_path = temp_file.name
+                    
+                    # Check available levels
+                    available_levels = self.loader.check_available_levels(temp_path, sections=sections)
+                    
+                    if verbose:
+                        self._log(f"  Available levels: {list(available_levels.keys())}", to_stdout=verbose)
+
+                    # Load each requested level
+                    for level in levels:
+                        if level not in available_levels:
+                            continue
+                            
+                        try:
+                            self._log(f"  Extracting {level} level...", to_stdout=verbose)
+                            df = self.loader.load_to_level_df(
+                                temp_path,
+                                level=level,
+                                sections=sections,
+                                strict=False,
+                                source_path=source_path
+                            )
+                            level_dfs[level].append(df)
+                            self._log(f"    ✓ {level}: {df.shape}", to_stdout=verbose)
+                        except Exception as e:
+                            if not strict:
+                                self._log(f"⚠ Could not extract {level} level: \n{e}", to_stdout=verbose)
+                            else:
+                                raise
+                            
+                except Exception as e:
+                    self._log(f"⚠ Error transforming {sample_id}: {e}")
+                finally:
+                    if temp_path:
+                        try:
+                            os.unlink(temp_path)
+                        except:
+                            pass
+        
+        return level_dfs
 
     def _load_result_dfs_from_paths(
         self,
@@ -463,87 +605,17 @@ class SearchCollection:
         Dict[str, List[pd.DataFrame]]
             Dictionary mapping levels to lists of DataFrames
         """
-        # Initialize storage for each level
-        level_dfs: Dict[str, List[pd.DataFrame]] = {level: [] for level in levels}
+        # Step 1: Load raw files
+        raw_dfs = self._load_raw_result_dfs(file_paths, verbose=verbose)
         
-        for sample_id, file_path in file_paths.items():
-            self._log(f"\nProcessing {sample_id}", to_stdout=verbose)
-            
-            # Read raw file
-            results_df = self._read_raw_result_file(file_path, sample_id)
-            
-            if results_df.empty:
-                self._log(f"⚠ Empty data for {sample_id}", to_stdout=verbose)
-                continue
-            
-            # For Spectronaut data, DataFrame is already at the correct level
-            if 'spectronaut' in self.search_type:
-                level_type = 'peptide' if '_peptide' in sample_id else 'protein'
-                
-                if level_type not in levels:
-                    continue
-                    
-                try:
-                    self._log(f"  Loading {level_type} level...", to_stdout=verbose)
-                    level_dfs[level_type].append(results_df)
-                    self._log(f"    ✓ {level_type}: {results_df.shape}", to_stdout=verbose)
-                except Exception as e:
-                    if not strict:
-                        self._log(f"⚠ Could not load {level_type} level: \n{e}", to_stdout=verbose)
-                    else:
-                        raise
-                    
-            elif 'diann' in self.search_type:
-                # For DIA-NN data, write to temp TSV and use loader
-                temp_path = None
-                source_path = None
-                df_to_write = results_df
-                
-                if '_source_zip' in results_df.columns:
-                    source_path = results_df['_source_zip'].iloc[0] if len(results_df) > 0 else None
-                    df_to_write = results_df.drop(columns=['_source_zip'])
-                    
-                try:
-                    with tempfile.NamedTemporaryFile(mode='w', suffix='.tsv', delete=False) as temp_file:
-                        df_to_write.to_csv(temp_file.name, sep='\t', index=False)
-                        temp_path = temp_file.name
-                    
-                    # Check available levels
-                    available_levels = self.loader.check_available_levels(temp_path, sections=sections)
-                    
-                    if verbose:
-                        self._log(f"  Available levels: {list(available_levels.keys())}", to_stdout=verbose)
-
-                    # Load each requested level
-                    for level in levels:
-                        if level not in available_levels:
-                            continue
-                            
-                        try:
-                            self._log(f"  Loading {level} level...", to_stdout=verbose)
-                            df = self.loader.load_to_level_df(
-                                temp_path,
-                                level=level,
-                                sections=sections,
-                                strict=False,
-                                source_path=source_path
-                            )
-                            level_dfs[level].append(df)
-                            self._log(f"    ✓ {level}: {df.shape}", to_stdout=verbose)
-                        except Exception as e:
-                            if not strict:
-                                self._log(f"⚠ Could not load {level} level: \n{e}", to_stdout=verbose)
-                            else:
-                                raise
-                            
-                except Exception as e:
-                    self._log(f"⚠ Error processing {sample_id}: {e}")
-                finally:
-                    if temp_path:
-                        try:
-                            os.unlink(temp_path)
-                        except:
-                            pass
+        # Step 2: Transform by level
+        level_dfs = self._transform_raw_dfs_by_level(
+            raw_dfs, 
+            levels=levels, 
+            sections=sections, 
+            strict=strict, 
+            verbose=verbose
+        )
         
         return level_dfs
 
@@ -711,6 +783,67 @@ class SearchCollection:
             Processed path
         """
         return str(Path(path).resolve())
+    
+    def _find_all_results_file_paths(
+        self,
+        paths: str | list,
+        levels: Optional[List[str]] = None,
+        metadata: Optional[pd.DataFrame] = None,
+        verbose: bool = False
+    ) -> Dict[str, str]:
+        """
+        Load search results from a folder or zip and add to collection.
+
+        Parameters:
+        -----------
+        paths : str | list
+            Path to folder or zip file containing search results, or a list of such paths    
+        levels : List[str], optional
+            Specific levels to load (precursor, protein, gene, peptide)
+            If None, loads all available levels
+        metadata : pd.DataFrame, optional
+            Metadata dataframe with 'processing_run_uuid' column to filter specific searches.
+            If provided, only loads search results matching the UUIDs in the metadata.
+            This allows loading only specific searches from large zip files instead of 
+            extracting everything.
+        """
+        # Convert single path to list for uniform handling
+        paths = paths if isinstance(paths, list) else [paths]
+        
+        # Get target UUIDs if metadata is provided
+        target_uuids = None
+        if metadata is not None and 'processing_run_uuid' in metadata.columns:
+            target_uuids = set(metadata['processing_run_uuid'].dropna().unique())
+        
+        all_results_data = {}
+        for p in paths:
+            search_path = self._get_search_path(p)
+            results_data = self._find_results_files(search_path, metadata=metadata, levels=levels)
+            all_results_data.update(results_data)
+
+        if not all_results_data:
+            expected_structure = {
+                'bps_diann': 'tims-diann.result/results.tsv',
+                'bps_spectronaut': 'spectronaut-id.peptide.parquet / spectronaut-id.protein.parquet',
+                'fragpipe': 'sample/diann-output/report.tsv'
+            }
+            self._log(f"⚠ No results found in {len(paths)} path(s) for search_type='{self.search_type}'", to_stdout=verbose)
+            self._log(f"  Expected structure: {expected_structure.get(self.search_type, 'unknown')}", to_stdout=verbose)
+            self._log(f"  Continuing with empty collection...", to_stdout=verbose)
+            return all_results_data
+
+        self._log(f"Found {len(all_results_data)} result samples ({self.search_type} format)", to_stdout=verbose)
+        
+        # Log which UUIDs were found if metadata filtering was used
+        if target_uuids is not None:
+            found_uuids = set(all_results_data.keys())
+            missing_uuids = target_uuids - found_uuids
+            if found_uuids:
+                self._log(f"Successfully found {len(found_uuids)} searches from metadata", to_stdout=verbose)
+            if missing_uuids:
+                self._log(f"Warning: {len(missing_uuids)} searches from metadata not found: {missing_uuids}", to_stdout=verbose)
+
+        return all_results_data
 
     def add_searches(
         self,
@@ -741,22 +874,24 @@ class SearchCollection:
             This allows loading only specific searches from large zip files instead of 
             extracting everything.
         """
-        # Determine which levels to load
-        if levels is None:
-            levels = list(self.loader.config['levels'].keys())
+        # Workflow step 1-3: Load raw results
+        raw_dfs = self.load_results(paths, metadata=metadata, verbose=verbose)
         
-        # Workflow step 1 & 2: Find all result file paths
-        file_paths = self._find_all_result_file_paths(paths, metadata=metadata, levels=levels, verbose=verbose)
-        
-        if not file_paths:
+        if not raw_dfs:
             self._log(f"⚠ No result files found. Exiting.", to_stdout=verbose)
             return
         
-        # Workflow step 3 & 4: Load and transform raw files into level DataFrames
-        level_dfs = self._load_result_dfs_from_paths(file_paths, levels, sections=sections, strict=strict, verbose=verbose)
+        # Workflow step 4-5: Transform raw results into merged level DataFrames
+        if levels is None:
+            levels = list(self.loader.config['levels'].keys())
         
-        # Workflow step 5: Merge DataFrames for each level
-        merged_dfs = self._merge_level_dfs(level_dfs, verbose=verbose)
+        merged_dfs = self.transform_to_levels(
+            raw_dfs, 
+            levels=levels, 
+            sections=sections, 
+            strict=strict, 
+            verbose=verbose
+        )
         
         # Workflow step 6: Add merged DataFrames to collection as AnnData objects
         self.add_searches_from_dfs(merged_dfs, levels=levels, sections=sections, verbose=verbose)
@@ -764,26 +899,16 @@ class SearchCollection:
     def load_results(
         self,
         path: str | list,
-        levels: Optional[List[str]] = None,
-        sections: Optional[List[str]] = None,
-        strict: bool = False,
         metadata: Optional[pd.DataFrame] = None,
         verbose: bool = False
     ) -> Dict[str, pd.DataFrame]:
         """
-        Load search results from folders or zips and return as DataFrames by level.
+        Load raw search results from folders or zips.
 
         Parameters:
         -----------
         path : str | list
-            Path to folder or zip file containing search results, or a list of such paths    
-        levels : List[str], optional
-            Specific levels to load (precursor, protein, gene, peptide)
-            If None, loads all available levels
-        sections : List[str], optional
-            Specific sections to include
-        strict : bool
-            If True, raise error if expected columns are missing
+            Path to folder or zip file containing search results, or a list of such paths
         metadata : pd.DataFrame, optional
             Metadata dataframe with 'processing_run_uuid' column to filter specific searches.
             If provided, only loads search results matching the UUIDs in the metadata.
@@ -793,189 +918,68 @@ class SearchCollection:
         Returns:
         --------
         Dict[str, pd.DataFrame]
-            Dictionary mapping level names to merged DataFrames
+            Dictionary mapping sample IDs to raw result DataFrames
         """
-        # Determine which levels to load
-        if levels is None:
-            levels = list(self.loader.config['levels'].keys())
-        
         # Workflow step 1 & 2: Find all result file paths
-        file_paths = self._find_all_result_file_paths(path, metadata=metadata, levels=levels, verbose=verbose)
+        # Note: levels parameter only used for Spectronaut to filter peptide/protein files
+        file_paths = self._find_all_result_file_paths(path, metadata=metadata, levels=None, verbose=verbose)
         
         if not file_paths:
             self._log(f"⚠ No result files found.", to_stdout=verbose)
             return {}
         
-        # Workflow step 3 & 4: Load and transform raw files into level DataFrames
-        level_dfs = self._load_result_dfs_from_paths(file_paths, levels, sections=sections, strict=strict, verbose=verbose)
+        # Workflow step 3: Load raw result files
+        raw_dfs = self._load_raw_result_dfs(file_paths, verbose=verbose)
+        
+        return raw_dfs
+
+    def transform_to_levels(
+        self,
+        raw_dfs: Dict[str, pd.DataFrame],
+        levels: Optional[List[str]] = None,
+        sections: Optional[List[str]] = None,
+        strict: bool = False,
+        verbose: bool = False
+    ) -> Dict[str, pd.DataFrame]:
+        """
+        Transform raw result DataFrames into merged level-specific DataFrames.
+
+        Parameters:
+        -----------
+        raw_dfs : Dict[str, pd.DataFrame]
+            Dictionary mapping sample IDs to raw result DataFrames
+        levels : List[str], optional
+            Specific levels to extract (precursor, protein, gene, peptide)
+            If None, extracts all available levels
+        sections : List[str], optional
+            Specific sections to include
+        strict : bool
+            If True, raise error if expected columns are missing
+        verbose : bool
+            Whether to log verbose output
+            
+        Returns:
+        --------
+        Dict[str, pd.DataFrame]
+            Dictionary mapping level names to merged DataFrames
+        """
+        # Determine which levels to extract
+        if levels is None:
+            levels = list(self.loader.config['levels'].keys())
+        
+        # Workflow step 4: Transform raw DataFrames by level
+        level_dfs = self._transform_raw_dfs_by_level(
+            raw_dfs, 
+            levels=levels, 
+            sections=sections, 
+            strict=strict, 
+            verbose=verbose
+        )
         
         # Workflow step 5: Merge DataFrames for each level
         merged_dfs = self._merge_level_dfs(level_dfs, verbose=verbose)
         
         return merged_dfs
-
-        self._log(f"Found {len(all_results_data)} result samples ({self.search_type} format)", to_stdout=verbose)
-        
-        # Log which UUIDs were found if metadata filtering was used
-        if target_uuids is not None:
-            found_uuids = set(all_results_data.keys())
-            missing_uuids = target_uuids - found_uuids
-            if found_uuids:
-                self._log(f"Successfully found {len(found_uuids)} searches from metadata", to_stdout=verbose)
-            if missing_uuids:
-                self._log(f"Warning: {len(missing_uuids)} searches from metadata not found: {missing_uuids}", to_stdout=verbose)
-
-        # Determine which levels to load
-        if levels is None and 'diann' in self.search_type:
-            if 'diann' in self.search_type:
-                # For FragPipe-DIA-NN, load entire results.tsv without splitting into levels
-                levels = None
-            else:
-                levels = list(self.loader.config['levels'].keys())
-
-        if levels is not None:
-            # Temporary storage for sample AnnData objects before concatenation
-            level_samples: Dict[str, List[ad.AnnData]] = {level: [] for level in levels}
-
-        # Process each results dataframe
-        for uuid, results_df in all_results_data.items():
-            self._log(f"\nProcessing {uuid}", to_stdout=verbose)
-            
-            # For Spectronaut data, process DataFrame directly without TSV conversion
-            if 'spectronaut' in self.search_type:
-                # Extract the level type from the UUID (peptide or protein)
-                level_type = 'peptide' if '_peptide' in uuid else 'protein'
-                
-                # Only process if this level is requested
-                if level_type not in levels:
-                    continue
-                    
-                try:
-                    self._log(f"  Loading {level_type} level...", to_stdout=verbose)
-                    
-                    # Add to temporary list for concatenation (like other search types)
-                    level_samples[level_type].append(results_df)
-                    
-                    self._log(f"    ✓ {level_type}: {results_df.shape}", to_stdout=verbose)
-                    
-                except Exception as e:
-                    if not strict:
-                        self._log(f"⚠ Could not load {level_type} level: \n{e}", to_stdout=verbose)
-                    else:
-                        self._log(f"Error loading {uuid} at {level_type} level: {e}", to_stdout=verbose)
-                    continue
-                    
-            else:
-                # For DIA-NN data, use the original TSV-based approach
-                temp_path = None
-                # Extract source path if available, then remove the temporary column from a copy
-                source_path = None
-                df_to_write = results_df
-                if '_source_zip' in results_df.columns:
-                    source_path = results_df['_source_zip'].iloc[0] if len(results_df) > 0 else None
-                    df_to_write = results_df.drop(columns=['_source_zip'])
-                    
-                try:
-                    with tempfile.NamedTemporaryFile(mode='w', suffix='.tsv', delete=False) as temp_file:
-                        df_to_write.to_csv(temp_file.name, sep='\t', index=False)
-                        temp_path = temp_file.name
-                    
-                    # Check which levels are available FIRST (more efficient - only reads header)
-                    available_levels = self.loader.check_available_levels(
-                        temp_path,
-                        sections=sections
-                    )
-                    
-                    if verbose:
-                        self._log(f"  Available levels for {uuid}: {list(available_levels.keys())}", to_stdout=verbose)
-                        self._log(f"  Requested levels: {levels}", to_stdout=verbose)
-
-                    # Try to load each requested level
-                    for level in levels:
-                        level_info = available_levels.get(level, {})
-
-                        try:
-                            self._log(f"  Loading {level} level...", to_stdout=verbose)
-
-                            # Load using the temporary file path, but track original source
-                            df = self.loader.load_to_df(
-                                temp_path,
-                                level=level,
-                                sections=sections,
-                                strict=False,
-                                source_path=source_path
-                            )
-
-                            # Add sample UUID/name to df (only for non-Spectronaut data)
-                            # if 'spectronaut' not in self.search_type:
-                            #     df['UUID'] = uuid
-
-                            # Add to temporary list for concatenation
-                            level_samples[level].append(df)
-
-                            # Print DataFrame summary
-                            self._log(f"    ✓ {level}: {df.shape}", to_stdout=verbose)
-
-                        except Exception as e:
-                            # Handle errors during loading
-                            if not strict:
-                                self._log(f"⚠ Could not load {level} level: \n{e}", to_stdout=verbose)
-                            else:
-                                self._log(f"Error loading {uuid} at {level} level: {e}", to_stdout=verbose)
-                                break
-                            continue
-                            
-                except Exception as e:
-                    self._log(f"⚠ Error processing {uuid}: {e}")
-                finally:
-                    # Clean up temp file
-                    if temp_path:
-                        try:
-                            os.unlink(temp_path)
-                        except:
-                            pass
-        # Concatenate samples for each level (for all search types)
-        self._log("\nCombining samples across levels...", to_stdout=verbose)
-
-        for level in levels:
-            if level_samples[level]:  # If we have any samples for this level
-                self._log(f"  Combining {len(level_samples[level])} samples for {level} level...", to_stdout=verbose)
-
-                # Apply search_path_index logic to handle duplicate sample names from different searches
-                # Collect all unique search_paths across all DataFrames
-                all_search_paths = set()
-                for df in level_samples[level]:
-                    if 'search_path' in df.columns:
-                        all_search_paths.update(df['search_path'].unique())
-                
-                # Check if we need to handle existing data with search_path_index
-                existing_search_paths = set()
-                apply_search_path_index = False
-                
-                if level in self.data and 'search_path' in self.data[level].var.columns:
-                    # Existing data has search_path, get unique values
-                    existing_search_paths = set(self.data[level].var['search_path'].unique())
-                    all_search_paths.update(existing_search_paths)
-                
-                # Determine if we need search_path_index (multiple search paths or existing has it)
-                has_existing_index = level in self.data and 'search_path_index' in self.data[level].var.columns
-                has_multiple_paths = len(all_search_paths) > 1
-                
-                if has_multiple_paths or has_existing_index:
-                    apply_search_path_index = True
-                    self._log(f"  Found {len(all_search_paths)} unique search paths. Creating search_path_index...", to_stdout=verbose)
-                    
-                    # Create mapping from search_path to index
-                    search_path_to_index = {path: idx for idx, path in enumerate(sorted(all_search_paths))}
-                    
-                    # Apply search_path_index to each DataFrame
-                    for i, df in enumerate(level_samples[level]):
-                        if 'search_path' in df.columns:
-                            df['search_path_index'] = df['search_path'].map(search_path_to_index)
-                            self._log(f"    Added search_path_index to DataFrame {i+1}/{len(level_samples[level])}", to_stdout=verbose)
-
-                # Concatenate DataFrames first, then convert to AnnData
-                concat_df = pd.concat(level_samples[level], axis=0, ignore_index=True)
 
     def add_dfs_to_collection(self,
                           levels_dfs: Union[Dict[str, pd.DataFrame], pd.DataFrame],
