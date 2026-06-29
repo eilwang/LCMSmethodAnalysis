@@ -35,17 +35,22 @@ class SearchCollection:
     Each level contains all samples concatenated together.
     """
 
-    def __init__(self, search_type: str = 'bps_diann', config_path: Optional[str] = None, log_file: Optional[str] = None):
+    def __init__(self, search_type: str = 'bps_diann', config_path: Optional[str] = None, log_file: Optional[str] = None, additional_columns: Optional[Dict[str, Dict]] = None):
         """
         Initialize SearchCollection.
 
         Parameters:
         -----------
+        search_type : str
+            Type of search data ('bps_diann', 'bps_spectronaut', 'fragpipe_diann')
         config_path : str
             Path to YAML configuration file defining column mappings
         log_file : str, optional
             Path to log file. If provided, all print output will be written to this file.
             If None, output goes to stdout only.
+        additional_columns : Dict[str, Dict], optional
+            Dictionary mapping custom column names to their configuration.
+            See SearchLoader documentation for format.
         """
         self.search_type = search_type
 
@@ -61,11 +66,14 @@ class SearchCollection:
             module_dir = os.path.dirname(os.path.abspath(__file__))
             config_path = os.path.join(module_dir, config_path)
 
-        self.loader = SearchLoader(search_type=search_type, config_path=config_path)
+        self.loader = SearchLoader(search_type=search_type, config_path=config_path, additional_columns=additional_columns)
         # Store as dict: {level: AnnData} where each AnnData contains all samples
         self.data: Dict[str, ad.AnnData] = {}
         self.temp_dirs: List[str] = []
         self.search_index: Dict[str, int] = {}
+        
+        # Track pending column configurations that haven't been committed to loader yet
+        self.pending_column_configs: Dict[str, Dict] = {}
 
         # Set up logging
         self.log_file = log_file
@@ -468,6 +476,163 @@ class SearchCollection:
         
         return raw_dfs
 
+    def add_computed_columns(
+        self,
+        raw_dfs: Dict[str, pd.DataFrame],
+        transformations: List[Dict],
+        commit_immediately: bool = False,
+        verbose: bool = False
+    ) -> Dict[str, pd.DataFrame]:
+        """
+        Apply transformations to raw DataFrames to add computed columns.
+        
+        Parameters:
+        -----------
+        raw_dfs : Dict[str, pd.DataFrame]
+            Dictionary mapping sample IDs to raw DataFrames
+        transformations : List[Dict]
+            List of transformation specifications. Each dict should contain:
+            - 'column_name': str - Name of the new column
+            - 'function': callable or str - Function to apply or string expression to eval
+            - 'storage': str - Where to store in AnnData ('var', 'obs', or 'layer')
+            - 'levels': List[str] or None - Which levels to apply to (None = all)
+            - 'section': str - Which section (default: 'optional')
+        commit_immediately : bool
+            If True, commit column configs to loader immediately. If False (default),
+            store as pending configs that can be committed later.
+        verbose : bool
+            Whether to log verbose output
+            
+        Returns:
+        --------
+        Dict[str, pd.DataFrame]
+            Modified DataFrames with new columns
+            
+        Examples:
+        ---------
+        # Using a function
+        transformations = [{
+            'column_name': 'log_intensity',
+            'function': lambda df: np.log10(df['Intensity'] + 1),
+            'storage': 'layer',
+            'levels': ['precursor'],
+            'section': 'quantification'
+        }]
+        
+        # Using a string expression
+        transformations = [{
+            'column_name': 'intensity_ratio',
+            'function': 'df["Intensity"] / df["Precursor.Quantity"]',
+            'storage': 'var',
+            'levels': None,  # Apply to all levels
+            'section': 'optional'
+        }]
+        """
+        if not transformations:
+            return raw_dfs
+        
+        self._log("\nApplying computed column transformations...", to_stdout=verbose)
+        
+        # Process each transformation
+        for transform in transformations:
+            column_name = transform['column_name']
+            func = transform['function']
+            storage = transform.get('storage', 'var')
+            levels = transform.get('levels', None)
+            section = transform.get('section', 'optional')
+            
+            # Validate storage type
+            if storage not in ['var', 'obs', 'layer']:
+                self._log(f"⚠ Invalid storage '{storage}' for column '{column_name}', skipping", to_stdout=verbose)
+                continue
+            
+            # Store column config as pending (don't commit to loader yet)
+            self.pending_column_configs[column_name] = {
+                'storage': storage,
+                'levels': levels,
+                'section': section
+            }
+            
+            # Apply transformation to each DataFrame
+            applied_count = 0
+            for sample_id, df in raw_dfs.items():
+                # Determine if transformation should be applied to this sample
+                # For Spectronaut, check if sample matches level constraint
+                should_apply = True
+                if 'spectronaut' in self.search_type and levels is not None:
+                    # Extract level from sample_id (e.g., "uuid_peptide" -> "peptide")
+                    sample_level = 'peptide' if '_peptide' in sample_id else 'protein'
+                    should_apply = sample_level in levels
+                
+                if not should_apply:
+                    continue
+                
+                try:
+                    # Apply transformation
+                    if callable(func):
+                        # Function provided
+                        df[column_name] = func(df)
+                    elif isinstance(func, str):
+                        # String expression to evaluate
+                        df[column_name] = eval(func)
+                    else:
+                        self._log(f"⚠ Invalid function type for '{column_name}', skipping", to_stdout=verbose)
+                        continue
+                    
+                    applied_count += 1
+                    
+                except Exception as e:
+                    self._log(f"⚠ Error applying transformation '{column_name}' to {sample_id}: {e}", to_stdout=verbose)
+                    continue
+            
+            self._log(f"  ✓ Added column '{column_name}' (storage: {storage}) to {applied_count}/{len(raw_dfs)} samples", to_stdout=verbose)
+        
+        # Optionally commit column configs immediately
+        if commit_immediately:
+            self.commit_column_configs(verbose=verbose)
+        
+        return raw_dfs
+
+    def commit_column_configs(self, verbose: bool = False):
+        """Commit pending column configurations to the loader.
+        
+        Parameters:
+        -----------
+        verbose : bool
+            Whether to log verbose output
+        """
+        if not self.pending_column_configs:
+            self._log("No pending column configurations to commit.", to_stdout=verbose)
+            return
+        
+        self._log(f"\nCommitting {len(self.pending_column_configs)} column configurations to loader...", to_stdout=verbose)
+        
+        for column_name, config in self.pending_column_configs.items():
+            self.loader.add_column_config(
+                column_name=column_name,
+                storage=config['storage'],
+                levels=config['levels'],
+                section=config['section']
+            )
+            self._log(f"  ✓ Committed '{column_name}' (storage: {config['storage']})", to_stdout=verbose)
+        
+        # Clear pending configs after committing
+        self.pending_column_configs.clear()
+    
+    def clear_pending_column_configs(self):
+        """Clear all pending column configurations without committing them."""
+        self.pending_column_configs.clear()
+    
+    def list_pending_column_configs(self) -> Dict[str, Dict]:
+        """Return a copy of pending column configurations.
+        
+        Returns:
+        --------
+        Dict[str, Dict]
+            Dictionary mapping column names to their configurations
+        """
+        return self.pending_column_configs.copy()
+
     def _transform_raw_dfs_by_level(
         self,
         raw_dfs: Dict[str, pd.DataFrame],
@@ -694,6 +859,10 @@ class SearchCollection:
         if levels is None:
             levels = list(level_dfs.keys())
         
+        # Commit any pending column configurations before converting to AnnData
+        if self.pending_column_configs:
+            self.commit_column_configs(verbose=verbose)
+        
         self._log("\nConverting DataFrames to AnnData objects...", to_stdout=verbose)
         
         for level in levels:
@@ -852,6 +1021,8 @@ class SearchCollection:
         sections: Optional[List[str]] = None,
         strict: bool = False,
         metadata: Optional[pd.DataFrame] = None,
+        transformations: Optional[List[Dict]] = None,
+        commit_immediately: bool = False,
         verbose: bool = False
     ):
         """
@@ -873,9 +1044,17 @@ class SearchCollection:
             If provided, only loads search results matching the UUIDs in the metadata.
             This allows loading only specific searches from large zip files instead of 
             extracting everything.
+        transformations : List[Dict], optional
+            List of transformation specifications to apply to raw DataFrames before
+            converting to AnnData. See load_results() for format.
+        commit_immediately : bool
+            If True, commit column configs immediately. If False (default),
+            configs are automatically committed when adding to collection.
+        verbose : bool
+            Whether to log verbose output
         """
-        # Workflow step 1-3: Load raw results
-        raw_dfs = self.load_results(paths, metadata=metadata, verbose=verbose)
+        # Workflow step 1-3: Load raw results (with optional transformations)
+        raw_dfs = self.load_results(paths, metadata=metadata, transformations=transformations, commit_immediately=commit_immediately, verbose=verbose)
         
         if not raw_dfs:
             self._log(f"⚠ No result files found. Exiting.", to_stdout=verbose)
@@ -898,8 +1077,10 @@ class SearchCollection:
 
     def load_results(
         self,
-        path: str | list,
+        paths: str | list,
         metadata: Optional[pd.DataFrame] = None,
+        transformations: Optional[List[Dict]] = None,
+        commit_immediately: bool = False,
         verbose: bool = False
     ) -> Dict[str, pd.DataFrame]:
         """
@@ -907,11 +1088,22 @@ class SearchCollection:
 
         Parameters:
         -----------
-        path : str | list
+        paths : str | list
             Path to folder or zip file containing search results, or a list of such paths
         metadata : pd.DataFrame, optional
             Metadata dataframe with 'processing_run_uuid' column to filter specific searches.
             If provided, only loads search results matching the UUIDs in the metadata.
+        transformations : List[Dict], optional
+            List of transformation specifications to apply to raw DataFrames.
+            Each dict should contain:
+            - 'column_name': str - Name of the new column
+            - 'function': callable or str - Function to apply or string expression
+            - 'storage': str - Where to store ('var', 'obs', or 'layer')
+            - 'levels': List[str] or None - Which levels to apply to
+            - 'section': str - Section name (default: 'optional')
+        commit_immediately : bool
+            If True, commit column configs immediately. If False (default),
+            store as pending configs.
         verbose : bool
             Whether to log verbose output
             
@@ -922,7 +1114,7 @@ class SearchCollection:
         """
         # Workflow step 1 & 2: Find all result file paths
         # Note: levels parameter only used for Spectronaut to filter peptide/protein files
-        file_paths = self._find_all_result_file_paths(path, metadata=metadata, levels=None, verbose=verbose)
+        file_paths = self._find_all_result_file_paths(paths, metadata=metadata, levels=None, verbose=verbose)
         
         if not file_paths:
             self._log(f"⚠ No result files found.", to_stdout=verbose)
@@ -930,6 +1122,10 @@ class SearchCollection:
         
         # Workflow step 3: Load raw result files
         raw_dfs = self._load_raw_result_dfs(file_paths, verbose=verbose)
+        
+        # Workflow step 3b (optional): Apply transformations to add computed columns
+        if transformations:
+            raw_dfs = self.add_computed_columns(raw_dfs, transformations, commit_immediately=commit_immediately, verbose=verbose)
         
         return raw_dfs
 
@@ -1004,6 +1200,10 @@ class SearchCollection:
                 levels = list(levels_dfs.keys())
         if isinstance(levels, str):
             levels = [levels]
+        
+        # Commit any pending column configurations before converting to AnnData
+        if self.pending_column_configs:
+            self.commit_column_configs(verbose=False)
         
         for level in levels:
             concat_df = levels_dfs[level]
@@ -1152,6 +1352,7 @@ class SearchCollection:
 
         return pd.concat(df_list, ignore_index=True) if df_list else pd.DataFrame()
 
+    ## TODO: useless right now
     def summary_df(self) -> pd.DataFrame:
         """
         Create summary DataFrame showing samples and their data shapes per level.
@@ -1164,20 +1365,16 @@ class SearchCollection:
         summary_data = []
 
         for level, adata in self.data.items():
-            if 'Sample' in adata.var.columns:
-                samples = adata.var_names.unique()
-                for sample in samples:
-                    # Each sample is a column, so n_obs is constant across samples
-                    summary_data.append({
+            samples = adata.var_names.unique()
+            for sample in samples:
+                # Each sample is a column, so n_obs is constant across samples
+                summary_data.append({
                         'Sample': sample,
                         'Level': level,
                         'n_obs': adata.n_obs,  # Number of genes/proteins/precursors
                         'n_vars': 1,  # Each sample is one column
                         'shape': f"({adata.n_obs}, {adata.n_vars})"
-                    })
-
-        if not summary_data:
-            return pd.DataFrame()
+                })
 
         df = pd.DataFrame(summary_data)
 

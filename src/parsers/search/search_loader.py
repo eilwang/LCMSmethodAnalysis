@@ -13,8 +13,25 @@ from scipy.sparse import csr_matrix
 logger = logging.getLogger(__name__)
 
 class SearchLoader:
-    def __init__(self, search_type: str = 'bps_diann', config_path: Optional[str] = None):
-        """Initialize with DIA-NN/Spectronaut column configuration file."""
+    def __init__(self, search_type: str = 'bps_diann', config_path: Optional[str] = None, additional_columns: Optional[Dict[str, Dict]] = None):
+        """Initialize with DIA-NN/Spectronaut column configuration file.
+        
+        Parameters:
+        -----------
+        search_type : str
+            Type of search data ('bps_diann', 'bps_spectronaut', 'fragpipe_diann')
+        config_path : str, optional
+            Path to YAML configuration file
+        additional_columns : Dict[str, Dict], optional
+            Dictionary mapping custom column names to their configuration:
+            {
+                'column_name': {
+                    'storage': 'var'|'obs'|'layer',  # Where to store in AnnData
+                    'levels': ['precursor', 'protein'],  # Which levels it applies to (None = all)
+                    'section': 'identification'|'quantification'|'optional'  # Which section
+                }
+            }
+        """
         # If config_path is relative, resolve it relative to this module's directory
 
         if config_path is None:
@@ -33,6 +50,61 @@ class SearchLoader:
             self.config = yaml.safe_load(f)
         
         self.search_type = search_type
+        
+        # Store additional custom columns configuration
+        self.additional_columns = additional_columns or {}
+    
+    def add_column_config(self, column_name: str, storage: str, levels: Optional[List[str]] = None, section: str = 'optional'):
+        """Add or update a custom column configuration.
+        
+        Parameters:
+        -----------
+        column_name : str
+            Name of the custom column
+        storage : str
+            Where to store in AnnData: 'var', 'obs', or 'layer'
+        levels : List[str], optional
+            Which levels this column applies to (None = all levels)
+        section : str
+            Which section to include the column in (default: 'optional')
+        """
+        if storage not in ['var', 'obs', 'layer']:
+            raise ValueError(f"storage must be 'var', 'obs', or 'layer', got '{storage}'")
+        
+        self.additional_columns[column_name] = {
+            'storage': storage,
+            'levels': levels,
+            'section': section
+        }
+    
+    def remove_column_config(self, column_name: str):
+        """Remove a custom column configuration."""
+        if column_name in self.additional_columns:
+            del self.additional_columns[column_name]
+    
+    def get_additional_columns_for_level(self, level: str, section: Optional[str] = None) -> List[str]:
+        """Get list of additional columns applicable to a specific level and section.
+        
+        Parameters:
+        -----------
+        level : str
+            The level to get columns for
+        section : str, optional
+            Filter by section (if None, returns all)
+        
+        Returns:
+        --------
+        List[str]
+            List of additional column names
+        """
+        columns = []
+        for col_name, config in self.additional_columns.items():
+            # Check if level applies
+            if config.get('levels') is None or level in config.get('levels', []):
+                # Check if section applies
+                if section is None or config.get('section') == section:
+                    columns.append(col_name)
+        return columns
             
     def get_columns(
         self,
