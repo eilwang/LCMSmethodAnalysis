@@ -152,13 +152,18 @@ class SearchCollection:
         
         # Get absolute path to the export zip
         export_zip_abs = os.path.abspath(str(search_export_path_obj))
+        
+        if verbose:
+            self._log(f"Opening export zip: {export_zip_abs}", to_stdout=True)
 
         with zipfile.ZipFile(search_export_path_obj, 'r') as export_zip:
             # Get all entries in the zip file
             all_paths = export_zip.namelist()
             all_result_zips = [i for i in all_paths if 'tims-diann.result.zip' in i]
             if verbose:
-                print(f"Found {len(all_result_zips)} tims-diann.result.zip files")
+                self._log(f"Found {len(all_result_zips)} tims-diann.result.zip files", to_stdout=True)
+                for path in all_result_zips:
+                    self._log(f"  - {path}", to_stdout=True)
 
             for result_zip_path in all_result_zips:
                 try:
@@ -166,6 +171,8 @@ class SearchCollection:
                     with tempfile.TemporaryDirectory() as temp_dir:
                         # Extract the inner zip file to temp directory
                         inner_zip_path = export_zip.extract(result_zip_path, temp_dir)
+                        if verbose:
+                            self._log(f"Extracting: {result_zip_path}", to_stdout=True)
                         # Open the extracted inner zip file
                         with zipfile.ZipFile(inner_zip_path, 'r') as inner_zip:
                             # Check if results.tsv exists in the inner zip
@@ -179,9 +186,19 @@ class SearchCollection:
                                     # Format: /absolute/path/to/export.zip::uuid/tims-diann.result.zip
                                     df['_source_zip'] = export_zip_abs + '::' + result_zip_path
                                     results[uuid] = df
+                                    if verbose:
+                                        self._log(f"  ✓ Loaded UUID {uuid}: {df.shape}", to_stdout=True)
+                                elif verbose:
+                                    self._log(f"  ⊘ Skipped UUID {uuid} (not in target list)", to_stdout=True)
+                            else:
+                                if verbose:
+                                    self._log(f"  ⚠ No results.tsv in {result_zip_path}", to_stdout=True)
                 except Exception as e:
                     if verbose:
-                        print(f"  Error processing {result_zip_path}: {e}")
+                        self._log(f"  ✗ Error processing {result_zip_path}: {e}", to_stdout=True)
+                    import traceback
+                    if verbose:
+                        self._log(traceback.format_exc(), to_stdout=True)
         return results
 
     def _load_fragpipe_diann(self, fragpipe_path):
@@ -378,7 +395,7 @@ class SearchCollection:
         file_path : str
             Path to the result file
         sample_id : str
-            Sample identifier
+            Sample identifier (may have 'zip:' prefix for zip files)
         
         Returns:
         --------
@@ -386,21 +403,27 @@ class SearchCollection:
             Raw data from the file
         """
         try:
-            if file_path.startswith('zip:'):
+            # Check if this is a zip file based on the sample_id prefix
+            if sample_id.startswith('zip:'):
                 # Handle zip files
-                zip_path = file_path[4:]  # Remove 'zip:' prefix
                 if 'bps_diann' in self.search_type:
-                    results = self._load_bps_diann_export(zip_path)
+                    self._log(f"Loading BPS DIA-NN export from: {file_path}", to_stdout=True)
+                    results = self._load_bps_diann_export(file_path, verbose=True)
+                    self._log(f"Found {len(results)} searches in export", to_stdout=True)
+                    if not results:
+                        self._log("⚠ No searches found in export zip", to_stdout=True)
+                        return pd.DataFrame()
                     # Return combined results with source tracking
                     all_dfs = []
                     for uuid, df in results.items():
+                        self._log(f"  - {uuid}: {df.shape}", to_stdout=True)
                         all_dfs.append(df)
                     return pd.concat(all_dfs, ignore_index=True) if all_dfs else pd.DataFrame()
                 elif 'fragpipe_diann' in self.search_type:
                     # Extract and load fragpipe results
                     temp_dir = tempfile.mkdtemp(prefix='fragpipe_extract_')
                     self.temp_dirs.append(temp_dir)
-                    with zipfile.ZipFile(zip_path, 'r') as zf:
+                    with zipfile.ZipFile(file_path, 'r') as zf:
                         zf.extractall(temp_dir)
                     results = self._load_fragpipe_diann(Path(temp_dir))
                     all_dfs = list(results.values())
@@ -409,7 +432,7 @@ class SearchCollection:
                     # Extract and load spectronaut results
                     temp_dir = tempfile.mkdtemp(prefix='spectronaut_extract_')
                     self.temp_dirs.append(temp_dir)
-                    with zipfile.ZipFile(zip_path, 'r') as zf:
+                    with zipfile.ZipFile(file_path, 'r') as zf:
                         zf.extractall(temp_dir)
                     # Find parquet files in extracted directory
                     extracted_path = Path(temp_dir)

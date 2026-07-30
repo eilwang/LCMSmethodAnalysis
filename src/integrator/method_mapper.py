@@ -1,13 +1,13 @@
 from logging import warning
 
 import pandas as pd
-from src.parsers.search.search_collection import SearchCollection
+from parsers.search.search_collection import SearchCollection
 from typing import Dict, Optional, Union
 
 from parsers.vneometh.lc_method_collection import VNeoMethodCollection
 
 
-def map_lcms_methods(searchcollection: BPSCollection, 
+def map_lcms_methods(searchcollection: SearchCollection, 
                      sequences: Union[str, list[str]], 
                      existing='fillna', 
                      inplace=True
