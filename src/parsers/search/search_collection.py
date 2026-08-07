@@ -35,14 +35,16 @@ class SearchCollection:
     Each level contains all samples concatenated together.
     """
 
-    def __init__(self, search_type: str = 'bps_diann', config_path: Optional[str] = None, log_file: Optional[str] = None, additional_columns: Optional[Dict[str, Dict]] = None):
+    def __init__(self, container: str = 'bps', engine: str = 'diann', config_path: Optional[str] = None, log_file: Optional[str] = None, additional_columns: Optional[Dict[str, Dict]] = None, search_type: Optional[str] = None):
         """
         Initialize SearchCollection.
 
         Parameters:
         -----------
-        search_type : str
-            Type of search data ('bps_diann', 'bps_spectronaut', 'fragpipe_diann')
+        container : str
+            Data container type ('bps', 'fragpipe', 'diann')
+        engine : str
+            Search engine type ('diann', 'spectronaut')
         config_path : str
             Path to YAML configuration file defining column mappings
         log_file : str, optional
@@ -51,13 +53,39 @@ class SearchCollection:
         additional_columns : Dict[str, Dict], optional
             Dictionary mapping custom column names to their configuration.
             See SearchLoader documentation for format.
+        search_type : str, optional
+            DEPRECATED: Use container and engine parameters instead.
+            Format: 'container_engine' (e.g., 'bps_diann')
         """
-        self.search_type = search_type
+        # Handle deprecated search_type parameter
+        if search_type is not None:
+            warnings.warn(
+                "The 'search_type' parameter is deprecated. Use 'container' and 'engine' parameters instead.",
+                DeprecationWarning,
+                stacklevel=2
+            )
+            parts = search_type.split('_')
+            if len(parts) == 2:
+                container, engine = parts
+            elif len(parts) == 1:
+                # Handle single values like 'diann'
+                if parts[0] in ['diann', 'spectronaut']:
+                    engine = parts[0]
+                    container = 'diann' if engine == 'diann' else 'bps'
+                else:
+                    container = parts[0]
+                    engine = 'diann'
+        
+        self.container = container
+        self.engine = engine
+        
+        # Maintain search_type as a computed property for backward compatibility
+        self.search_type = f"{container}_{engine}"
 
         if config_path is None:
-            if "diann" in search_type: 
+            if engine == 'diann': 
                 config_path = "diann_columns.yaml"
-            elif 'spectronaut' in search_type:
+            elif engine == 'spectronaut':
                 config_path = "spnt_columns.yaml"
             else:
                 config_path = "diann_columns.yaml"
@@ -66,7 +94,7 @@ class SearchCollection:
             module_dir = os.path.dirname(os.path.abspath(__file__))
             config_path = os.path.join(module_dir, config_path)
 
-        self.loader = SearchLoader(search_type=search_type, config_path=config_path, additional_columns=additional_columns)
+        self.loader = SearchLoader(container=container, engine=engine, config_path=config_path, additional_columns=additional_columns)
         # Store as dict: {level: AnnData} where each AnnData contains all samples
         self.data: Dict[str, ad.AnnData] = {}
         self.temp_dirs: List[str] = []
@@ -211,6 +239,24 @@ class SearchCollection:
             results[report] = df
         return results
 
+    def _load_diann_reports(self, diann_path):
+        """Load DIA-NN report files (parquet or tsv) from extracted directory."""
+        # Look for both parquet and tsv formats
+        parquet_reports = list(diann_path.rglob('**/report.parquet'))
+        tsv_reports = list(diann_path.rglob('**/report.tsv'))
+        reports = parquet_reports + tsv_reports
+        
+        results = {}
+        for report in reports:
+            if report.suffix == '.parquet':
+                df = pd.read_parquet(report)
+            else:  # .tsv
+                df = pd.read_csv(report, sep='\t')
+            # Store absolute path to the report file
+            df['_source_zip'] = str(report.resolve())
+            results[report] = df
+        return results
+
     def _find_result_file_paths_single(
         self,
         path: str,
@@ -245,7 +291,14 @@ class SearchCollection:
             target_uuids = set(metadata['processing_run_uuid'].dropna().unique())
             self._log(f"Filtering for {len(target_uuids)} specific searches from metadata")
 
-        if self.search_type == 'bps_diann':
+        # If path is a file, try to read it directly
+        if p.is_file() and not zipfile.is_zipfile(p):
+            # Use filename (without extension) as sample name
+            sample_name = p.stem
+            result_file_paths[sample_name] = str(p.resolve())
+            return result_file_paths
+
+        if self.container == 'bps' and self.engine == 'diann':
             if p.is_dir():
                 # Find direct TSV files
                 tsv_files = list(p.rglob("results.tsv"))
@@ -280,7 +333,7 @@ class SearchCollection:
                 # Single zip file
                 result_file_paths[f"zip:{p}"] = str(p.resolve())
 
-        elif 'fragpipe_diann' in self.search_type:
+        elif self.container == 'fragpipe' and self.engine == 'diann':
             if p.is_dir():
                 # Find report.tsv files
                 reports = list(p.rglob('**/report.tsv'))
@@ -291,7 +344,18 @@ class SearchCollection:
                 # Store zip path for extraction later
                 result_file_paths[f"zip:{p}"] = str(p.resolve())
 
-        elif self.search_type == 'bps_spectronaut':
+        elif self.container == 'diann' and self.engine == 'diann':
+            if p.is_dir():
+                # Find report.parquet or report.tsv files
+                reports = list(p.rglob('**/report.parquet')) + list(p.rglob('**/report.tsv'))
+                for report in reports:
+                    result_file_paths[str(report)] = str(report.resolve())
+
+            elif zipfile.is_zipfile(p):
+                # Store zip path for extraction later
+                result_file_paths[f"zip:{p}"] = str(p.resolve())
+
+        elif self.container == 'bps' and self.engine == 'spectronaut':
             if levels is not None:
                 self._log(f"Filtering Spectronaut files for levels: {levels}")
             
@@ -333,7 +397,7 @@ class SearchCollection:
                 result_file_paths[f"zip:{p}"] = str(p.resolve())
 
         else:
-            raise ValueError(f"Unknown search_type: {self.search_type}. Must be 'bps_diann', 'bps_spectronaut', or 'fragpipe_diann'")
+            raise ValueError(f"Unknown container/engine combination: container='{self.container}', engine='{self.engine}'. Valid combinations: bps+diann, bps+spectronaut, fragpipe+diann, diann+diann")
         
         return result_file_paths
 
@@ -406,7 +470,7 @@ class SearchCollection:
             # Check if this is a zip file based on the sample_id prefix
             if sample_id.startswith('zip:'):
                 # Handle zip files
-                if 'bps_diann' in self.search_type:
+                if self.container == 'bps' and self.engine == 'diann':
                     self._log(f"Loading BPS DIA-NN export from: {file_path}", to_stdout=True)
                     results = self._load_bps_diann_export(file_path, verbose=True)
                     self._log(f"Found {len(results)} searches in export", to_stdout=True)
@@ -419,7 +483,7 @@ class SearchCollection:
                         self._log(f"  - {uuid}: {df.shape}", to_stdout=True)
                         all_dfs.append(df)
                     return pd.concat(all_dfs, ignore_index=True) if all_dfs else pd.DataFrame()
-                elif 'fragpipe_diann' in self.search_type:
+                elif self.container == 'fragpipe' and self.engine == 'diann':
                     # Extract and load fragpipe results
                     temp_dir = tempfile.mkdtemp(prefix='fragpipe_extract_')
                     self.temp_dirs.append(temp_dir)
@@ -428,7 +492,16 @@ class SearchCollection:
                     results = self._load_fragpipe_diann(Path(temp_dir))
                     all_dfs = list(results.values())
                     return pd.concat(all_dfs, ignore_index=True) if all_dfs else pd.DataFrame()
-                elif 'spectronaut' in self.search_type:
+                elif self.container == 'diann' and self.engine == 'diann':
+                    # Extract and load diann results (report.parquet or report.tsv)
+                    temp_dir = tempfile.mkdtemp(prefix='diann_extract_')
+                    self.temp_dirs.append(temp_dir)
+                    with zipfile.ZipFile(file_path, 'r') as zf:
+                        zf.extractall(temp_dir)
+                    results = self._load_diann_reports(Path(temp_dir))
+                    all_dfs = list(results.values())
+                    return pd.concat(all_dfs, ignore_index=True) if all_dfs else pd.DataFrame()
+                elif self.engine == 'spectronaut':
                     # Extract and load spectronaut results
                     temp_dir = tempfile.mkdtemp(prefix='spectronaut_extract_')
                     self.temp_dirs.append(temp_dir)
@@ -447,7 +520,7 @@ class SearchCollection:
                 # Read parquet file
                 df = pd.read_parquet(file_path)
                 # Add file type metadata for Spectronaut
-                if 'spectronaut' in self.search_type:
+                if self.engine == 'spectronaut':
                     file_type = 'peptide' if 'peptide' in file_path else 'protein'
                     df['file_type'] = file_type
                 return df
@@ -582,7 +655,7 @@ class SearchCollection:
                 # Determine if transformation should be applied to this sample
                 # For Spectronaut, check if sample matches level constraint
                 should_apply = True
-                if 'spectronaut' in self.search_type and levels is not None:
+                if self.engine == 'spectronaut' and levels is not None:
                     # Extract level from sample_id (e.g., "uuid_peptide" -> "peptide")
                     sample_level = 'peptide' if '_peptide' in sample_id else 'protein'
                     should_apply = sample_level in levels
@@ -694,7 +767,7 @@ class SearchCollection:
             self._log(f"\nTransforming {sample_id} by level", to_stdout=verbose)
             
             # For Spectronaut data, DataFrame is already at the correct level
-            if 'spectronaut' in self.search_type:
+            if self.engine == 'spectronaut':
                 level_type = 'peptide' if '_peptide' in sample_id else 'protein'
                 
                 if level_type not in levels:
@@ -710,7 +783,7 @@ class SearchCollection:
                     else:
                         raise
                     
-            elif 'diann' in self.search_type:
+            elif self.engine == 'diann':
                 # For DIA-NN data, split the raw DataFrame by level
                 temp_path = None
                 source_path = None
@@ -1439,8 +1512,10 @@ class SearchCollection:
     @classmethod
     def from_file(cls,
                    filepath: str, 
-                   search_type: str = "bps_diann", 
-                   config_path: Optional[str] = None
+                   container: str = "bps",
+                   engine: str = "diann", 
+                   config_path: Optional[str] = None,
+                   search_type: Optional[str] = None
                    ):
         """
         Load collection from file.
@@ -1449,27 +1524,48 @@ class SearchCollection:
         -----------
         filepath : str
             Path to saved file
-        search_type : str
-            Type of search (default: "bps_spectronaut")
+        container : str
+            Data container type ('bps', 'fragpipe', 'diann')
+        engine : str
+            Search engine type ('diann', 'spectronaut')
         config_path : str
             Path to YAML configuration file
+        search_type : str, optional
+            DEPRECATED: Use container and engine parameters instead.
 
         Returns:
         --------
         SearchCollection
             Loaded collection
         """
+        # Handle deprecated search_type parameter
+        if search_type is not None:
+            warnings.warn(
+                "The 'search_type' parameter is deprecated. Use 'container' and 'engine' parameters instead.",
+                DeprecationWarning,
+                stacklevel=2
+            )
+            parts = search_type.split('_')
+            if len(parts) == 2:
+                container, engine = parts
+            elif len(parts) == 1:
+                if parts[0] in ['diann', 'spectronaut']:
+                    engine = parts[0]
+                    container = 'diann' if engine == 'diann' else 'bps'
+                else:
+                    container = parts[0]
+                    engine = 'diann'
 
         if config_path is None:
-            if "diann" in search_type: 
+            if engine == 'diann': 
                 config_path = "diann_columns.yaml"
-            elif 'spectronaut' in search_type:
+            elif engine == 'spectronaut':
                 config_path = "spnt_columns.yaml"
             else:
                 config_path = "diann_columns.yaml"
                 
         filepath_obj = Path(filepath)
-        collection = cls(config_path)
+        collection = cls(container=container, engine=engine, config_path=config_path)
 
         if filepath_obj.suffix == '.pkl':
             # Load from pickle

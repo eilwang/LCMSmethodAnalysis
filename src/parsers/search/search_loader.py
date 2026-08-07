@@ -13,13 +13,15 @@ from scipy.sparse import csr_matrix
 logger = logging.getLogger(__name__)
 
 class SearchLoader:
-    def __init__(self, search_type: str = 'bps_diann', config_path: Optional[str] = None, additional_columns: Optional[Dict[str, Dict]] = None):
+    def __init__(self, container: str = 'bps', engine: str = 'diann', config_path: Optional[str] = None, additional_columns: Optional[Dict[str, Dict]] = None, search_type: Optional[str] = None):
         """Initialize with DIA-NN/Spectronaut column configuration file.
         
         Parameters:
         -----------
-        search_type : str
-            Type of search data ('bps_diann', 'bps_spectronaut', 'fragpipe_diann')
+        container : str
+            Data container type ('bps', 'fragpipe', 'diann')
+        engine : str
+            Search engine type ('diann', 'spectronaut')
         config_path : str, optional
             Path to YAML configuration file
         additional_columns : Dict[str, Dict], optional
@@ -31,16 +33,43 @@ class SearchLoader:
                     'section': 'identification'|'quantification'|'optional'  # Which section
                 }
             }
+        search_type : str, optional
+            DEPRECATED: Use container and engine parameters instead.
+            Format: 'container_engine' (e.g., 'bps_diann')
         """
-        # If config_path is relative, resolve it relative to this module's directory
+        # Handle deprecated search_type parameter
+        if search_type is not None:
+            warnings.warn(
+                "The 'search_type' parameter is deprecated. Use 'container' and 'engine' parameters instead.",
+                DeprecationWarning,
+                stacklevel=2
+            )
+            parts = search_type.split('_')
+            if len(parts) == 2:
+                container, engine = parts
+            elif len(parts) == 1:
+                # Handle single values like 'diann'
+                if parts[0] in ['diann', 'spectronaut']:
+                    engine = parts[0]
+                    container = 'diann' if engine == 'diann' else 'bps'
+                else:
+                    container = parts[0]
+                    engine = 'diann'
+        
+        self.container = container
+        self.engine = engine
+        
+        # Maintain search_type as a computed property for backward compatibility
+        self.search_type = f"{container}_{engine}"
 
+        # If config_path is relative, resolve it relative to this module's directory
         if config_path is None:
-            if "diann" in search_type: 
+            if engine == 'diann': 
                 config_path = "diann_columns.yaml"
-            elif 'spectronaut' in search_type:
+            elif engine == 'spectronaut':
                 config_path = "spnt_columns.yaml"
             else:
-                raise ValueError(f"Unknown search_type '{search_type}'. Must contain 'diann' or 'spectronaut'.")
+                raise ValueError(f"Unknown engine '{engine}'. Must be 'diann' or 'spectronaut'.")
 
         if not os.path.isabs(config_path):
             module_dir = os.path.dirname(os.path.abspath(__file__))
@@ -48,8 +77,6 @@ class SearchLoader:
 
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
-        
-        self.search_type = search_type
         
         # Store additional custom columns configuration
         self.additional_columns = additional_columns or {}
@@ -105,6 +132,139 @@ class SearchLoader:
                 if section is None or config.get('section') == section:
                     columns.append(col_name)
         return columns
+    
+    def add_column_to_yaml_config(self, level: str, section: str, column_name: str):
+        """Add a column to a specific level and section in the YAML config.
+        
+        Parameters:
+        -----------
+        level : str
+            The level to add the column to (e.g., 'precursor', 'protein')
+        section : str
+            The section within the level (e.g., 'var', 'obs', 'x', 'layers')
+        column_name : str
+            Name of the column to add
+        """
+        if 'levels' not in self.config:
+            self.config['levels'] = {}
+        
+        if level not in self.config['levels']:
+            self.config['levels'][level] = {}
+        
+        if section not in self.config['levels'][level]:
+            self.config['levels'][level][section] = []
+        
+        # Ensure section is a list
+        if not isinstance(self.config['levels'][level][section], list):
+            self.config['levels'][level][section] = []
+        
+        # Add column if not already present
+        if column_name not in self.config['levels'][level][section]:
+            self.config['levels'][level][section].append(column_name)
+    
+    def remove_column_from_yaml_config(self, level: str, section: str, column_name: str):
+        """Remove a column from a specific level and section in the YAML config.
+        
+        Parameters:
+        -----------
+        level : str
+            The level to remove the column from
+        section : str
+            The section within the level
+        column_name : str
+            Name of the column to remove
+        """
+        if (level in self.config.get('levels', {}) and 
+            section in self.config['levels'][level] and
+            isinstance(self.config['levels'][level][section], list)):
+            
+            if column_name in self.config['levels'][level][section]:
+                self.config['levels'][level][section].remove(column_name)
+    
+    def add_level_to_yaml_config(self, level: str, level_config: Optional[Dict] = None):
+        """Add a new level to the YAML config.
+        
+        Parameters:
+        -----------
+        level : str
+            Name of the level to add
+        level_config : Dict, optional
+            Configuration for the level. If None, creates empty level with standard sections.
+        """
+        if 'levels' not in self.config:
+            self.config['levels'] = {}
+        
+        if level not in self.config['levels']:
+            if level_config is None:
+                # Create default structure
+                self.config['levels'][level] = {
+                    'var_name': [],
+                    'obs_name': [],
+                    'var': [],
+                    'obs': [],
+                    'x': [],
+                    'layers': [],
+                    'optional': []
+                }
+            else:
+                self.config['levels'][level] = level_config
+    
+    def remove_level_from_yaml_config(self, level: str):
+        """Remove a level from the YAML config.
+        
+        Parameters:
+        -----------
+        level : str
+            Name of the level to remove
+        """
+        if level in self.config.get('levels', {}):
+            del self.config['levels'][level]
+    
+    def add_section_to_level(self, level: str, section: str, columns: Optional[List[str]] = None):
+        """Add a section to a level in the YAML config.
+        
+        Parameters:
+        -----------
+        level : str
+            The level to add the section to
+        section : str
+            Name of the section to add
+        columns : List[str], optional
+            Initial columns for the section (default: empty list)
+        """
+        if 'levels' not in self.config:
+            self.config['levels'] = {}
+        
+        if level not in self.config['levels']:
+            raise ValueError(f"Level '{level}' not found in config")
+        
+        if section not in self.config['levels'][level]:
+            self.config['levels'][level][section] = columns if columns is not None else []
+    
+    def remove_section_from_level(self, level: str, section: str):
+        """Remove a section from a level in the YAML config.
+        
+        Parameters:
+        -----------
+        level : str
+            The level to remove the section from
+        section : str
+            Name of the section to remove
+        """
+        if (level in self.config.get('levels', {}) and 
+            section in self.config['levels'][level]):
+            del self.config['levels'][level][section]
+    
+    def save_yaml_config(self, output_path: str):
+        """Save the current config to a YAML file.
+        
+        Parameters:
+        -----------
+        output_path : str
+            Path where to save the YAML configuration
+        """
+        with open(output_path, 'w') as f:
+            yaml.dump(self.config, f, default_flow_style=False, sort_keys=False)
             
     def get_columns(
         self,
@@ -258,9 +418,13 @@ class SearchLoader:
         pd.DataFrame
             DataFrame containing the search data
             """
-        if "diann" in self.search_type:
-            df = pd.read_csv(filepath, sep='\t')
-        else:
+        # Determine file format by extension for diann engine (supports both parquet and tsv)
+        if self.engine == 'diann':
+            if filepath.endswith('.parquet'):
+                df = pd.read_parquet(filepath)
+            else:
+                df = pd.read_csv(filepath, sep='\t')
+        elif self.engine == 'spectronaut':
             df = pd.read_parquet(filepath)
         return df
 
@@ -391,16 +555,23 @@ class SearchLoader:
             result['search_path'] = source_path if source_path else os.path.abspath(filepath)
 
         # Add run and index information
-        if self.search_type == 'fragpipe_diann':
+        if self.container == 'fragpipe' and self.engine == 'diann':
             result['Run'] = result['File.Name'].apply(lambda x: os.path.splitext(os.path.basename(x))[0])
             result['hystar_index'] = result['Run'].str.extract(r'.+_(\d+)', expand=False)
 
-        elif self.search_type == 'bps_diann':
+        elif self.container == 'diann' and self.engine == 'diann':
+            # Same behavior as fragpipe+diann
+            result['Run'] = result['File.Name'].apply(lambda x: os.path.splitext(os.path.basename(x))[0])
+            result['hystar_index'] = result['Run'].str.extract(r'.+_(\d+)', expand=False)
+
+        elif self.container == 'bps' and self.engine == 'diann':
             result['hystar_index'] = result['File.Name'].str.extract(r'.+_(\d+)', expand=False)
-        elif self.search_type == 'bps_spectronaut':
+        elif self.container == 'bps' and self.engine == 'spectronaut':
             result['hystar_index'] = result['sample_name'].str.extract(r'.+_(\d+)', expand=False)
 
         result['search_type'] = self.search_type
+        result['container'] = self.container
+        result['engine'] = self.engine
         return result # type: ignore
 
     def get_valid_cols(self, df, level_config, level):
