@@ -549,25 +549,39 @@ class SearchLoader:
             result = result.groupby(valid_groupby_cols).agg(**agg_dict).reset_index()
             
             # Add search_path after aggregation to avoid it being included in aggregation warnings
-            result['search_path'] = source_path if source_path else os.path.abspath(filepath)
+            if source_path:
+                result['search_path'] = source_path
+            elif isinstance(data, str):
+                result['search_path'] = os.path.abspath(data)
+            else:
+                result['search_path'] = ''
         else:
             # For non-protein/gene levels, add search_path normally
-            result['search_path'] = source_path if source_path else os.path.abspath(filepath)
+            if source_path:
+                result['search_path'] = source_path
+            elif isinstance(data, str):
+                result['search_path'] = os.path.abspath(data)
+            else:
+                result['search_path'] = ''
 
         # Add run and index information
         if self.container == 'fragpipe' and self.engine == 'diann':
-            result['Run'] = result['File.Name'].apply(lambda x: os.path.splitext(os.path.basename(x))[0])
-            result['hystar_index'] = result['Run'].str.extract(r'.+_(\d+)', expand=False)
+            if 'File.Name' in result.columns:
+                result['Run'] = result['File.Name'].apply(lambda x: os.path.splitext(os.path.basename(x))[0])
+                result['hystar_index'] = result['Run'].str.extract(r'.+_(\d+)', expand=False)
 
         elif self.container == 'diann' and self.engine == 'diann':
             # Same behavior as fragpipe+diann
-            result['Run'] = result['File.Name'].apply(lambda x: os.path.splitext(os.path.basename(x))[0])
-            result['hystar_index'] = result['Run'].str.extract(r'.+_(\d+)', expand=False)
+            if 'File.Name' in result.columns:
+                result['Run'] = result['File.Name'].apply(lambda x: os.path.splitext(os.path.basename(x))[0])
+                result['hystar_index'] = result['Run'].str.extract(r'.+_(\d+)', expand=False)
 
         elif self.container == 'bps' and self.engine == 'diann':
-            result['hystar_index'] = result['File.Name'].str.extract(r'.+_(\d+)', expand=False)
+            if 'File.Name' in result.columns:
+                result['hystar_index'] = result['File.Name'].str.extract(r'.+_(\d+)', expand=False)
         elif self.container == 'bps' and self.engine == 'spectronaut':
-            result['hystar_index'] = result['sample_name'].str.extract(r'.+_(\d+)', expand=False)
+            if 'sample_name' in result.columns:
+                result['hystar_index'] = result['sample_name'].str.extract(r'.+_(\d+)', expand=False)
 
         result['search_type'] = self.search_type
         result['container'] = self.container
@@ -586,6 +600,10 @@ class SearchLoader:
         
         cols = [c for c in cols if c in df.columns]
         
+        if len(cols) == 0:
+            # No columns found at all, return empty list and None
+            return [], None
+        
         if level == 'layers':
             cols_without_nan = ~df.loc[:, cols].isna().all()
         else:
@@ -594,7 +612,9 @@ class SearchLoader:
         valid_cols = [col for col, is_valid in zip(cols, cols_without_nan) if is_valid]
 
         if len(valid_cols) == 0:
-            raise ValueError(f"No {level} columns found without NaN values. Tried: {cols}")
+            # No non-NaN columns found, but columns exist - return the first available column
+            logger.warning(f"No {level} columns found without NaN values. Using first available: {cols[0]}")
+            return [cols[0]], cols[0]
 
         main_col = valid_cols[0]
 
@@ -651,6 +671,14 @@ class SearchLoader:
 
         var, var_name = self.get_valid_cols(df, level_config, 'var')
         
+        # Handle case where no var columns found
+        if not var or var_name is None:
+            logger.warning(f"No var columns found for level '{level}', using index as var_name")
+            # Create a default var column if none exist
+            df['_default_var'] = df.index.astype(str)
+            var = ['_default_var']
+            var_name = '_default_var'
+        
         # Only add these columns if they exist in the DataFrame
         additional_vars = []
         if 'search_path' in df.columns:
@@ -662,19 +690,35 @@ class SearchLoader:
         var += additional_vars
 
         obs, obs_name = self.get_valid_cols(df, level_config, 'obs')
+        
+        # Handle case where no obs columns found
+        if not obs or obs_name is None:
+            logger.warning(f"No obs columns found for level '{level}', cannot create AnnData object")
+            raise ValueError(f"No obs columns found for level '{level}'. Cannot create AnnData without observation identifiers.")
 
 
         # Add pr_obs and pg_obs as layers if present in config
+        pr_obs_layers = []
+        pg_obs_layers = []
         try:
-            pr_obs_layers, _ = self.get_valid_cols(df, level_config, 'pr_obs')
+            pr_obs_result, _ = self.get_valid_cols(df, level_config, 'pr_obs')
+            if pr_obs_result:
+                pr_obs_layers = pr_obs_result
         except Exception:
-            pr_obs_layers = []
+            pass
         try:
-            pg_obs_layers, _ = self.get_valid_cols(df, level_config, 'pg_obs')
+            pg_obs_result, _ = self.get_valid_cols(df, level_config, 'pg_obs')
+            if pg_obs_result:
+                pg_obs_layers = pg_obs_result
         except Exception:
-            pg_obs_layers = []
+            pass
 
         layers, x = self.get_valid_cols(df, level_config, 'layers')
+        
+        # Handle case where no layers found
+        if not layers or x is None:
+            logger.warning(f"No layer columns found for level '{level}', cannot create AnnData object")
+            raise ValueError(f"No layer columns found for level '{level}'. Cannot create AnnData without data layers.")
         extra_layers = pr_obs_layers + pg_obs_layers
         if extra_layers:
             layers += extra_layers
