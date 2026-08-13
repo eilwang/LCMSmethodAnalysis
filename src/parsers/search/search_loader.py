@@ -64,8 +64,12 @@ class SearchLoader:
 
         # If config_path is relative, resolve it relative to this module's directory
         if config_path is None:
-            if engine == 'diann': 
-                config_path = "diann_columns.yaml"
+            if engine == 'diann':
+                # Use diann261 yaml for diann+diann, regular diann yaml for others
+                if container == 'diann':
+                    config_path = "diann261_columns.yaml"
+                else:
+                    config_path = "diann_columns.yaml"
             elif engine == 'spectronaut':
                 config_path = "spnt_columns.yaml"
             else:

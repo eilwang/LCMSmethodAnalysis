@@ -83,8 +83,12 @@ class SearchCollection:
         self.search_type = f"{container}_{engine}"
 
         if config_path is None:
-            if engine == 'diann': 
-                config_path = "diann_columns.yaml"
+            if engine == 'diann':
+                # Use diann261 yaml for diann+diann, regular diann yaml for others
+                if container == 'diann':
+                    config_path = "diann261_columns.yaml"
+                else:
+                    config_path = "diann_columns.yaml"
             elif engine == 'spectronaut':
                 config_path = "spnt_columns.yaml"
             else:
@@ -1557,8 +1561,12 @@ class SearchCollection:
                     engine = 'diann'
 
         if config_path is None:
-            if engine == 'diann': 
-                config_path = "diann_columns.yaml"
+            if engine == 'diann':
+                # Use diann261 yaml for diann+diann, regular diann yaml for others
+                if container == 'diann':
+                    config_path = "diann261_columns.yaml"
+                else:
+                    config_path = "diann_columns.yaml"
             elif engine == 'spectronaut':
                 config_path = "spnt_columns.yaml"
             else:
