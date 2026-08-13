@@ -1,0 +1,11 @@
+{
+  "extraPaths": [
+    "./src"
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    ".git",
+    "**/.*cache"
+  ]
+}
