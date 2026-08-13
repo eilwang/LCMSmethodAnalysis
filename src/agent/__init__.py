@@ -3,9 +3,9 @@
 """
 Usage Example:
 --------------
-from src.agent.tool_wrappers import parse_lc_method, parse_ms_method, load_diann_results
-from src.agent.optuna_optimizer import LCMSOptimizer
-from src.agent.claude_agent import ClaudeAgent
+from agent.tool_wrappers import parse_lc_method, parse_ms_method, load_diann_results
+from agent.optuna_optimizer import LCMSOptimizer
+from agent.claude_agent import ClaudeAgent
 
 # Parse LC method
 lc_info = parse_lc_method("path/to/lc_method.meth")

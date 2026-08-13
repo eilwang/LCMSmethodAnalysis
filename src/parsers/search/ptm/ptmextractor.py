@@ -285,7 +285,7 @@ def join_protein_mod_loc(df: pd.DataFrame,
 
     joined = joined.apply(lambda x: '_' + x if len(x) > 0 else '')
 
-    df[protein_mod_col] = df[protein_col].str.cat(joined)
+    df[protein_mod_col] = df[name_col].str.cat(joined)
     return df
 
 def clean_msstats_ptm(msstats_ptm_path,
@@ -312,23 +312,58 @@ def clean_msstats_ptm(msstats_ptm_path,
                                  in_place=False)
 
     df = filter_mods(df,
-            target_mods=target_mods, 
-            keep_only_target_mods=True,
-            filter_individual_site='any',
-            score_threshold=score_threshold,
-            in_place=False)
-    
-    df = join_protein_mod_loc(df,
-                     protein_col=protein_col,
-                     index_col ='mod_index',
-                     aa_col = 'mod_aa',
-                     score_col = 'loc_score',
-                     mod_col = 'mod',
-                     protein_mod_col = 'ProteinName_Mod',
-                     include_mod = False,
-                     include_score = False,
+                     target_mods=target_mods,
+                     keep_only_target_mods=True,
+                     filter_individual_site='any',
+                     score_threshold=score_threshold, # exclude any modications that do not meet the localization score threshold
                      in_place=False)
     
+    df = join_protein_mod_loc(df,
+                              name_col=protein_col,
+                              index_col ='mod_index',
+                              aa_col = 'mod_aa',
+                              score_col = 'loc_score',
+                              mod_col = 'mod',
+                              protein_mod_col = 'ProteinName_Mod',
+                              include_mod = False, # don't write the name of the mod in the name since we generally only look for 1 mod per AA
+                              include_score = False, # don't write the localization score in the name since it'd affect site matching
+                              in_place=False)
+    
+    if output_path:
+        df.to_csv(output_path, index=False)
+
+    return df
+
+def parse_diann_ptm(df,
+                    mod_peptide_col='Modified.Sequence',
+                    fixed_mod_regex = None,
+                    mod_regex = r"(\(UniMod:\d+\))",
+                    output_path=None):
+    """
+    Parse DIA-NN PTM data by processing modification information.
+    Extracts all modifications but keeps associated with the peptide (multiply mod allowed) (ie. for counting carbamidomethylation)
+    Does not compute localization scores and protein location for modifications yet as not provided on default in DIANN-output currently
+
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        Input DataFrame containing DIA-NN PTM data
+    mod_peptide_col : str
+        Column name for modified peptide sequences
+    fixed_mod_regex : str, optional
+        Regular expression to identify fixed modifications to be removed from the modified peptide sequences
+    mod_regex : str
+        Regular expression to identify modifications in the modified peptide sequences
+    output_path : str, optional
+        Path to save the processed DataFrame as a CSV file; if None, the DataFrame is not saved
+    """
+    df = df.copy()
+
+    if fixed_mod_regex:
+        df[mod_peptide_col] = df[mod_peptide_col].str.replace(fixed_mod_regex, "", regex=True)
+        
+    df[['mod_index', 'mod_aa', 'mod']] = df.apply(lambda row: get_mod_indices(row[mod_peptide_col], protein_start=0, regex=mod_regex), axis=1, result_type='expand')
+
     if output_path:
         df.to_csv(output_path, index=False)
 

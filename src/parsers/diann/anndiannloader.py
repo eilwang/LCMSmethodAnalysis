@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pandas as pd
 import yaml
 from typing import List, Optional, Dict
@@ -200,7 +202,12 @@ class DiannLoader:
         expected_cols = list(dict.fromkeys(expected_cols_raw))
 
         # Load full dataframe
-        df = pd.read_csv(filepath, sep='\t')
+        file_ext = Path(filepath).suffix
+
+        if file_ext == '.parquet':
+            df = pd.read_parquet(filepath)
+        else:   
+            df = pd.read_csv(filepath, sep='\t')
 
         # Check for missing columns
         missing_cols = set(expected_cols) - set(df.columns)
@@ -274,7 +281,7 @@ class DiannLoader:
             result['Run'] = result['File.Name'].apply(lambda x: os.path.splitext(os.path.basename(x))[0])
             result['hystar_index'] = result['Run'].str.extract(r'.+_(\d+)', expand=False)
 
-        elif search_type == 'bps':
+        elif search_type == 'bps' or search_type == 'diann':
             result['hystar_index'] = result['File.Name'].str.extract(r'.+_(\d+)', expand=False)
 
         result['search_type'] = search_type

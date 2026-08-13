@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, List, Union
 from pathlib import Path
 
 # Import method path resolver for LC/MS method files
-from src.parsers.method_path_resolver import MethodPathResolver
+from parsers.method_path_resolver import MethodPathResolver
 
 # Import DIA-NN collection loader
 from archive.diann_collection_loader import DiannCollectionLoader

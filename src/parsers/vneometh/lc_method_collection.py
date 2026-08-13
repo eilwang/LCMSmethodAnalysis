@@ -934,13 +934,13 @@ class VNeoMethodCollection:
         """
         not_found = []
 
-        if 'diann' in searchcollection.search_type:
+        if searchcollection.engine == 'diann':
             if 'precursor' not in searchcollection.list_levels():
                 warning("Precursor level not found in search collection. Cannot adjust gradients.")
             ad = searchcollection['precursor'] 
             sample_col = 'File.Name'
 
-        elif 'spectronaut' in searchcollection.search_type:
+        elif searchcollection.engine == 'spectronaut':
             if 'peptide' not in searchcollection.list_levels():
                 warning("Peptide level not found in search collection. Cannot adjust gradients.")
             ad = searchcollection['peptide']
@@ -954,8 +954,8 @@ class VNeoMethodCollection:
             sample_name = row[sample_col]
             lcmethod_name = row['lc meth']
 
-            # Get RT values based on search type
-            if 'spectronaut' in searchcollection.search_type:
+            # Get RT values based on search engine
+            if searchcollection.engine == 'spectronaut':
                 # For Spectronaut, use rt_start layer
                 rt_values = ad[:, ad.var[sample_col] == sample_name].layers['rt_start']
             else:

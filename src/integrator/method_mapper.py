@@ -37,7 +37,7 @@ def map_lcms_methods(searchcollection: SearchCollection,
     if isinstance(sequences, str):
         sequences = [sequences]
 
-    if "diann" in searchcollection.search_type:
+    if searchcollection.engine == 'diann':
         sample_col = 'sample'
     else:
         sample_col = 'sample_name'
@@ -61,7 +61,7 @@ def map_lcms_methods(searchcollection: SearchCollection,
     for level in searchcollection.data.keys():
         ad = searchcollection.data[level]
 
-        if "spectronaut" in searchcollection.search_type:
+        if searchcollection.engine == 'spectronaut':
             temp = ad.var_names
             ad.var_names = ad.var['sample_name']
 
@@ -88,7 +88,7 @@ def map_lcms_methods(searchcollection: SearchCollection,
             # Drop existing columns and replace with new data
             ad.var = ad.var.drop(columns=list, errors='ignore')
             ad.var = ad.var.join(df[list + [sample_col]].set_index(sample_col), how='left')
-        if "spectronaut" in searchcollection.search_type:
+        if searchcollection.engine == 'spectronaut':
             ad.var_names = temp
     return df
 
