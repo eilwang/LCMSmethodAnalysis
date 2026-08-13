@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("extract_pressure_dotnet")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+9c5426b323466dc1149969626fae81c391ebcc3d")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+49a9652ae4a65984404586c1c1d2680b07d0133c")]
 [assembly: System.Reflection.AssemblyProductAttribute("extract_pressure_dotnet")]
 [assembly: System.Reflection.AssemblyTitleAttribute("extract_pressure_dotnet")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
